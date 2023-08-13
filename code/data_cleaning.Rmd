@@ -1,0 +1,1145 @@
+---
+title: "220410_Competition"
+author: "Justin"
+date: "4/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Library 
+```{r}
+library(tidygeocoder)
+library(tidyverse)
+library(did)
+library(tidycensus)
+library(gtsummary)
+library(readxl)
+library(sandwich)
+library(lmtest)
+library(ggpubr)
+library(kableExtra)
+library(tigris)
+
+library(gridExtra)
+library(cowplot)
+library(Matching)
+library(fixest)
+library(directlabels)
+
+`%notin%` <- Negate(`%in%`)
+
+select <- dplyr::select
+
+#Sys.setenv('R_MAX_VSIZE'=32000000000)
+  
+```
+
+## Define new Tufte data theme
+```{r, echo = FALSE, results = "asis", message=FALSE, warning = FALSE, fig.align="center"}
+
+is.extrafont.installed <- function(){
+  if(is.element("extrafont", installed.packages()[,1])){
+    library(extrafont)
+    # probably need something here to run font_import()
+    return(T)
+  }else{
+    warning("Library extrafont installed; using system sans/serif libraries as fallback fonts. 
+    To enable full font support, run: 
+      install.packages('extrafont') 
+      font_import()")
+    return(F)
+  }
+}
+
+
+
+# set font
+base_font_family_tufte <- function(){
+  if(is.extrafont.installed()){
+    library(extrafont)
+    tuftefont <- choose_font(c("Gill Sans MT", "Gill Sans", "GillSans", "Verdana", "serif"), quiet = FALSE)  
+  }else{
+    tuftefont <- "serif"
+  }
+  return(tuftefont)
+}
+
+theme_tufte_revised <- function(base_size = 11, base_family = base_font_family_tufte(), ticks = TRUE) {
+  
+  ret <- theme_bw(base_family = base_family, base_size = base_size) + 
+    theme(
+      axis.line = element_line(color = 'black'),
+      axis.title.x = element_text(vjust = -0.3), 
+      axis.title.y = element_text(vjust = 0.8),
+      legend.background = element_blank(), 
+      legend.key = element_blank(), 
+      legend.title = element_text(face="plain"),
+      panel.background = element_blank(), 
+      panel.border = element_blank(),
+      panel.grid = element_blank(),
+      plot.background = element_blank(),
+      strip.background = element_blank()
+    )
+  
+  if (!ticks) {
+    ret <- ret + theme(axis.ticks = element_blank())
+  }
+  
+  ret
+} 
+
+```
+
+
+
+
+
+
+# Data
+
+## Read in UDS 
+
+```{r}
+
+## Zips
+locs <- paste("UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
+uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes") 
+
+new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
+colnames(uds.zip) <-    new.zip.names
+
+for(i in 2:length(locs)){
+  temp.zip <- read_excel(locs[i], sheet = "HealthCenterZipCodes")
+  colnames(temp.zip) <- new.zip.names
+  uds.zip <- rbind(uds.zip, temp.zip %>% mutate(`Zip Code` = str_pad(`Zip Code`, 5, pad = "0")))
+}
+
+## Rename
+new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" )
+colnames(uds.zip) <-    new.zip.names
+
+
+## Clean
+
+uds.zip[uds.zip$`Total Number of Patients`== '-' | uds.zip$`Total Number of Patients`== '--',]$`Total Number of Patients` <- NA
+uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
+uds.zip <- uds.zip[!is.na(uds.zip$`Total Number of Patients`),] %>%
+    mutate(`Reporting Year` = as.numeric(`Reporting Year`))
+
+uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
+uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
+uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
+uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
+
+
+uds.zip <- cbind(uds.zip, broken.total = rowSums(uds.zip[,c(6:9)], na.rm = TRUE), missings = rowSums(is.na(uds.zip[,c(6:9)]))) %>%
+  mutate(`Total Number of Patients` = as.numeric(`Total Number of Patients`)) %>%
+  mutate(`Total Number of Patients` = ifelse(is.na(`Total Number of Patients`), round(missings*16/4), `Total Number of Patients`)) %>%
+  mutate(`None_Uninsured Patients` = ifelse(is.na(`None_Uninsured Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `None_Uninsured Patients`),
+         `Medicaid_CHIP_Other Public Patients` = ifelse(is.na(`Medicaid_CHIP_Other Public Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicaid_CHIP_Other Public Patients`),
+         `Medicare Patients` = ifelse(is.na(`Medicare Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicare Patients`),
+         `Private Patients` = ifelse(is.na(`Private Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Private Patients`))
+
+# ## Old version with missingness still in there  
+# uds.zip$`Reporting Year` <- as.numeric(uds.zip$`Reporting Year`)
+# uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
+# uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
+# uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
+# uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
+# uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
+# 
+# 
+# uds.zip[is.na(uds.zip$`Total Number of Patients`),]$`Total Number of Patients` <- 0
+# uds.zip[grep("-", uds.zip$`None_Uninsured Patients`),]$`None_Uninsured Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicaid_CHIP_Other Public Patients`),]$`Medicaid_CHIP_Other Public Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicare Patients`),]$`Medicare Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Private Patients`),]$`Private Patients` <- 0
+# 
+uds.zip.totals <- uds.zip %>%
+  select(`Grant Number`, `Reporting Year`, `None_Uninsured Patients`:`Total Number of Patients`) %>%
+  group_by(`Grant Number`, `Reporting Year`) %>% summarise(None = sum(`None_Uninsured Patients`, na.rm = T),
+                                                           MCR = sum(`Medicare Patients`, na.rm = T),
+                                                           COM = sum(`Private Patients`, na.rm = T),
+                                                           MCD = sum(`Medicaid_CHIP_Other Public Patients`, na.rm = T),
+                                                           Total = sum(`Total Number of Patients`, na.rm = T))
+
+uds.zip <- uds.zip[uds.zip$`Zip Code Type` == "ZipCode",]
+
+
+
+
+
+## Sites
+locs <- paste("UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
+
+uds.sites <- read_excel(locs[1], sheet = "HealthCenterSiteInfo") %>% 
+  select(GrantNumber, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2014)
+
+
+colnames(uds.sites) <- c("Grant Number", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+for(i in 2:(length(locs)-1)){
+  uds.sites <- rbind(uds.sites, read_excel(locs[i], sheet = "HealthCenterSiteInfo") %>% 
+                       select("Grant Number", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code") %>% 
+  mutate(Year = 2013 + i))
+}
+
+temp.sites <- read_excel(locs[i+1], sheet = "HealthCenterSiteInfo" )%>% 
+  select(GrantNumber, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2021)
+colnames(temp.sites) <- c("Grant Number", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+uds.sites <- rbind(uds.sites, temp.sites)
+
+
+uds.sites$Zip <- substr(uds.sites$`Site ZIP Code`, 1, 5)
+
+uds.sites <- uds.sites %>% 
+  filter(`Site State` %notin% c('AK','HI','GU','VI','PW','MH','AS','FM','PR','MP'))
+
+uds.sites[grep(pattern = "-", uds.sites$Zip),]$Zip <- NA
+
+
+```
+
+
+
+## Clean up some of the missing zip codes
+
+```{r}
+
+tbcoded <- uds.sites[is.na(uds.sites$Zip),]
+coded <- geo(street = tbcoded[c(1:1000),]$`Site Street Address`, 
+             city = tbcoded[c(1:1000),]$`Site City`, 
+             state = tbcoded[c(1:1000),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE)
+
+for (g in 1:9){
+  g
+coded <- rbind(coded, 
+               geo(street = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site Street Address`, 
+             city = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site City`, 
+             state = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+}
+
+coded <- rbind(coded, 
+               geo(street = tbcoded[c(10001:10975),]$`Site Street Address`, 
+             city = tbcoded[c(10001:10975),]$`Site City`, 
+             state = tbcoded[c(10001:10975),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+
+
+coded[grep(pattern = "[[:digit:]]{5}$", coded$matched_address),]
+
+
+uds.sites[is.na(uds.sites$Zip),]$Zip <- str_extract(coded$matched_address, pattern = "[[:digit:]]{5}$")
+uds.sites[is.na(uds.sites$Zip),]
+
+uds.sites.temp <- uds.sites
+
+```
+
+
+
+
+```{r}
+
+uds.sites <- uds.sites.temp
+
+uds.sites.temp %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
+
+chc <- read.csv("chc.csv")
+
+chc %>% filter(Health.Center.Number %in% c("H80CS00881"))
+
+
+
+uds.sites[is.na(uds.sites$Zip),] <- uds.sites[is.na(uds.sites$Zip),] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Street Address" = "Site.Address")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`Grant Number`:Zip) %>%
+  unique()
+
+uds.sites[is.na(uds.sites$Zip),] <- uds.sites[is.na(uds.sites$Zip),] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Name" = "Site.Name")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`Grant Number`:Zip) %>%
+  unique()
+
+uds.sites[is.na(uds.sites$Zip),] 
+```
+
+
+
+
+```{r}
+
+
+table(uds.sites.temp$`Location Setting`)
+
+
+uds.sites <- uds.sites %>% #filter(`Location Type` == "Permanent" & `Location Setting` %in% c("All Other Clinic Types")) %>% 
+  mutate(Access = as.numeric(ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Full-Time", 40, 
+                  ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Part-Time", 10, `Total Weekly Hours Of Operation`))))
+
+uds.sites[is.na(uds.sites$Zip),] 
+
+uds.sites %>% 
+  arrange(`Total Weekly Hours Of Operation`, `Operational Schedule` )
+
+
+# z <- geocode(chc.term$SitePhysicalAddress)
+# 
+# 
+# y <- geo(address = chc.term$SitePhysicalAddress, method = "census")
+# 
+# write.csv(cbind(y[,1], y[,3], y[,2], z), file = "geocodedClosures.csv")
+
+
+```
+
+
+
+## Read in Quality data
+```{r}
+
+
+uds.6b.2012 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2013 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 1) 
+uds.6b.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+
+# rbind(
+# colnames(uds.6b.2014[,c(2, grep(pattern = "^%", colnames(uds.6b.2014))[-6])]),
+# colnames(uds.6b.2015[,c(2, grep(pattern = "^%", colnames(uds.6b.2015))[-6])]),
+# colnames(uds.6b.2016[,c(2, grep(pattern = "^%", colnames(uds.6b.2016))[-6])]),
+# colnames(uds.6b.2017[,c(2, grep(pattern = "^%", colnames(uds.6b.2017))[-6])]),
+# colnames(uds.6b.2018[,c(2, grep(pattern = "^%", colnames(uds.6b.2018))[-6])]),
+# colnames(uds.6b.2019[,c(2, grep(pattern = "^%", colnames(uds.6b.2019))[-6])]),
+# colnames(uds.6b.2020[,c(2, grep(pattern = "^%", colnames(uds.6b.2020))[-c(3, 11, 13)])]))
+# 
+# 
+# rbind(
+# colnames(uds.6b.2014[,c(2, grep(pattern = "^Total", colnames(uds.6b.2014))[-6])]),
+# colnames(uds.6b.2015[,c(2, grep(pattern = "^Total", colnames(uds.6b.2015))[-6])]),
+# colnames(uds.6b.2016[,c(2, grep(pattern = "^Total", colnames(uds.6b.2016))[-6])]),
+# colnames(uds.6b.2017[,c(2, grep(pattern = "^Total", colnames(uds.6b.2017))[-6])]),
+# colnames(uds.6b.2018[,c(2, grep(pattern = "^Total", colnames(uds.6b.2018))[-6])]),
+# colnames(uds.6b.2019[,c(2, grep(pattern = "^Total", colnames(uds.6b.2019))[-6])]),
+# colnames(uds.6b.2020[,c(2, grep(pattern = "^Total", colnames(uds.6b.2020))[-c(3, 11, 13)])]))
+
+
+
+
+
+namingshit <- c("GrantNumber", "IMM2yo", "Pap", "ChildBMI","AdultBMI","Tobac","CRC","DepScrn")
+namingshit.denom <- c("GrantNumber", "IMM2yo.denom", "Pap.denom", "ChildBMI.denom","AdultBMI.denom","Tobac.denom","CRC.denom","DepScrn.denom")
+
+uds.6b.rates <- rbind(
+  uds.6b.2014[,c(2, grep(pattern = "^%", colnames(uds.6b.2014))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2014), 
+  uds.6b.2015[,c(2, grep(pattern = "^%", colnames(uds.6b.2015))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2015),
+  uds.6b.2016[,c(2, grep(pattern = "^%", colnames(uds.6b.2016))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2016),
+  
+  uds.6b.2017[,c(2, grep(pattern = "^%", colnames(uds.6b.2017))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2017),
+  uds.6b.2018[,c(2, grep(pattern = "^%", colnames(uds.6b.2018))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2018),
+  
+  uds.6b.2019[,c(2, grep(pattern = "^%", colnames(uds.6b.2019))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2019),
+  uds.6b.2020[,c(2, grep(pattern = "^%", colnames(uds.6b.2020))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2020), 
+  uds.6b.2021[,c(2, grep(pattern = "^%", colnames(uds.6b.2021))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2021))
+
+uds.6b.rates$IMM2yo <- gsub(pattern = "%$", replacement = "", uds.6b.rates$IMM2yo)
+uds.6b.rates$Pap <- gsub(pattern = "%$", replacement = "", uds.6b.rates$Pap)
+uds.6b.rates$ChildBMI <- gsub(pattern = "%$", replacement = "", uds.6b.rates$ChildBMI)
+uds.6b.rates$AdultBMI <- gsub(pattern = "%$", replacement = "", uds.6b.rates$AdultBMI)
+
+uds.6b.rates$Tobac <- gsub(pattern = "%$", replacement = "", uds.6b.rates$Tobac)
+uds.6b.rates$CRC <- gsub(pattern = "%$", replacement = "", uds.6b.rates$CRC)
+uds.6b.rates$DepScrn <- gsub(pattern = "%$", replacement = "", uds.6b.rates$DepScrn)
+
+
+uds.6b.denom <- rbind(
+  uds.6b.2014[,c(2, grep(pattern = "^Total", colnames(uds.6b.2014))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2014), 
+  uds.6b.2015[,c(2, grep(pattern = "^Total", colnames(uds.6b.2015))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2015),
+  uds.6b.2016[,c(2, grep(pattern = "^Total", colnames(uds.6b.2016))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2016),
+  
+  uds.6b.2017[,c(2, grep(pattern = "^Total", colnames(uds.6b.2017))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2017),
+  uds.6b.2018[,c(2, grep(pattern = "^Total", colnames(uds.6b.2018))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2018),
+  
+  uds.6b.2019[,c(2, grep(pattern = "^Total", colnames(uds.6b.2019))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2019),
+  uds.6b.2020[,c(2, grep(pattern = "^Total", colnames(uds.6b.2020))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2020),
+  uds.6b.2021[,c(2, grep(pattern = "^Total", colnames(uds.6b.2021))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2021))
+
+
+
+for (k in 2:8) uds.6b.rates[grep("-", unlist(uds.6b.rates[,k])),k] <- NA
+for (k in 2:8) uds.6b.denom[grep("-", unlist(uds.6b.denom[,k])),k] <- NA
+
+
+uds.6b.rates <-  data.frame(GrantNumber = uds.6b.rates$GrantNumber, Year = uds.6b.rates$Year, lapply(uds.6b.rates[,c(2:8)], as.numeric)) 
+uds.6b.denom <-  data.frame(GrantNumber = uds.6b.denom$GrantNumber, Year = uds.6b.denom$Year, lapply(uds.6b.denom[,c(2:8)], as.numeric))
+
+uds.6b.rates[uds.6b.rates$Year == 2014,c(3:9)] <- uds.6b.rates[uds.6b.rates$Year == 2014,c(3:9)] * 100
+uds.6b.rates[,c(3:9)] <- uds.6b.rates[,c(3:9)] 
+
+## Finding highest-scoring quality FQHC
+# uds.6b.rates %>% 
+#   mutate(Qcomp = (IMM2yo + Pap + ChildBMI + AdultBMI + Tobac + CRC + DepScrn) / 7) %>% 
+#   arrange(desc(Qcomp)) %>% 
+#   filter(Year == 2021) %>% 
+#   select(GrantNumber, Year, Qcomp) %>% 
+#   left_join(chc %>% select(Health.Center.Number, Health.Center.Name, Health.Center.Organization.City, Health.Center.Organization.State) %>% unique(), by = c("GrantNumber" = "Health.Center.Number")) %>% 
+#   left_join(uds.6b.denom, by = c("GrantNumber","Year")) 
+
+
+```
+
+
+## Read in Technology Data
+```{r}
+
+uds.HIT.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 0) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 2) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+
+uds.HIT.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+
+uds.HIT.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>%
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)
+uds.HIT.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "HITInformation", skip = 0) %>%
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)
+
+uds.HIT.2020 <- data.frame(GrantNumber = uds.HIT.2020[,1], Tehr_L1b_Ca = uds.HIT.2020[,2], Tehr_L2_Ca = NA,	Tehr_L3_Ca = NA, Tehr_L4_Ca = uds.HIT.2020[,3], Tehr_L5_Ca = NA, Tehr_L7_Ca = uds.HIT.2020[,4])
+uds.HIT.2021 <- data.frame(GrantNumber = uds.HIT.2021[,1], Tehr_L1b_Ca = uds.HIT.2021[,2], Tehr_L2_Ca = NA,	Tehr_L3_Ca = NA, Tehr_L4_Ca = uds.HIT.2021[,3], Tehr_L5_Ca = NA, Tehr_L7_Ca = uds.HIT.2021[,4])
+
+
+
+
+namevec <- c("Year", "Grant Number", "SwitchEMR","eScripts","eDecisionSupport","InterOrgHITexchange","PatientPortals","UDSQualRep")
+uds.HIT <- rbind(cbind(Year = 2014, uds.HIT.2014),
+                  cbind(Year = 2015, uds.HIT.2015),
+                  cbind(Year = 2016, uds.HIT.2016),
+                  cbind(Year = 2017, uds.HIT.2017),
+                  
+                  cbind(Year = 2018, uds.HIT.2018),
+                  cbind(Year = 2019, uds.HIT.2019), 
+                  cbind(Year = 2020, uds.HIT.2020),
+                  cbind(Year = 2021, uds.HIT.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec) %>% 
+  mutate(UDSQualRep.levels = ifelse(UDSQualRep == "-", NA, 
+                             ifelse(UDSQualRep == "We do not use the EHR", 0, 
+                             ifelse(UDSQualRep == "We use the EHR but only to access individual patient charts", 1, 
+                             ifelse(UDSQualRep == "We use the EHR in combination with another data analytic system", 3, 2))))) %>% 
+  mutate(UDSQualRep.highlowuse = ifelse(UDSQualRep == "-", NA, 
+                             ifelse(UDSQualRep == "We do not use the EHR" | UDSQualRep == "We use the EHR but only to access individual patient charts", 0, 1))) %>%  
+  mutate(SwitchEMR = ifelse(SwitchEMR == "-", NA, ifelse(SwitchEMR == "Yes", 1, 0)),
+         eScripts = ifelse(eScripts == "-" | eScripts == "Not Sure", NA, ifelse(eScripts == "Yes", 1, 0)),
+         eDecisionSupport = ifelse(eDecisionSupport == "-" | eDecisionSupport == "Not Sure", NA, ifelse(eDecisionSupport == "Yes", 1, 0)),
+         InterOrgHITexchange = ifelse(InterOrgHITexchange == "-" | InterOrgHITexchange == "Not Sure", NA, ifelse(InterOrgHITexchange %in% c("No","None of the above"), 0, 1)),
+         PatientPortals = ifelse(PatientPortals == "-" | PatientPortals == "Not Sure", NA, ifelse(PatientPortals %in% c("No","No we do not engage patients using HIT"), 0, 1)))
+
+
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$SwitchEMR),]$SwitchEMR <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$eScripts),]$eScripts <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$eDecisionSupport),]$eDecisionSupport <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$InterOrgHITexchange),]$InterOrgHITexchange <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$PatientPortals),]$PatientPortals <- 0
+
+
+# namevec <- c("Year", "Grant Number", "SwitchEMR","InterOrgHITexchange","UDSQualRep")
+# uds.HIT <- rbind(cbind(Year = 2014, uds.HIT.2014 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2015, uds.HIT.2015 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2016, uds.HIT.2016 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2017, uds.HIT.2017 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   
+#                   cbind(Year = 2018, uds.HIT.2018 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2019, uds.HIT.2019 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),          
+#                   cbind(Year = 2020, uds.HIT.2020)) %>% 
+#   
+#   rename_all(vars(namevec), function(x) namevec) %>% 
+#   mutate(UDSQualRep.levels = ifelse(UDSQualRep == "-", NA, 
+#                              ifelse(UDSQualRep == "We do not use the EHR", 0, 
+#                              ifelse(UDSQualRep == "We use the EHR but only to access individual patient charts", 1, 
+#                              ifelse(UDSQualRep == "We use the EHR in combination with another data analytic system", 3, 2))))) %>% 
+#   mutate(UDSQualRep.highlowuse = ifelse(UDSQualRep == "-", NA, 
+#                              ifelse(UDSQualRep == "We do not use the EHR" | UDSQualRep == "We use the EHR but only to access individual patient charts", 0, 1))) %>%  
+#   mutate(SwitchEMR = ifelse(SwitchEMR == "-", NA, ifelse(SwitchEMR == "Yes", 1, 0)),
+#          InterOrgHITexchange = ifelse(InterOrgHITexchange == "-" | InterOrgHITexchange == "Not Sure", NA, ifelse(InterOrgHITexchange %in% c("No","None of the above"), 0, 1)))
+
+```
+
+
+
+
+## Read in Covariates
+```{r}
+# Table 3B
+uds.3B.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table3B", skip = 2) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+uds.3B.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+uds.3B.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+namevec <- c("Year", "Grant Number", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLang")
+uds.3B <- rbind(cbind(Year = 2014, uds.3B.2014),
+                  cbind(Year = 2015, uds.3B.2015),
+                  cbind(Year = 2016, uds.3B.2016),
+                  cbind(Year = 2017, uds.3B.2017),
+                  
+                  cbind(Year = 2018, uds.3B.2018),
+                  cbind(Year = 2019, uds.3B.2019), 
+                  cbind(Year = 2020, uds.3B.2020),
+                  cbind(Year = 2021, uds.3B.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+
+
+
+# Table 4
+uds.4.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table4", skip = 2) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+
+uds.4.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+
+uds.4.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+
+namevec <- c("Year", "Grant Number", "<100%", "101-150%", "151-200%", ">200%", "Unknown", "FarmWorker", "Homeless", "0-17yo", "18+yo")
+uds.4 <- rbind(cbind(Year = 2014, uds.4.2014),
+                  cbind(Year = 2015, uds.4.2015),
+                  cbind(Year = 2016, uds.4.2016),
+                  cbind(Year = 2017, uds.4.2017),
+                  
+                  cbind(Year = 2018, uds.4.2018),
+                  cbind(Year = 2019, uds.4.2019), 
+                  cbind(Year = 2020, uds.4.2020),
+                  cbind(Year = 2021, uds.4.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+
+
+
+# Put covariate tables together
+
+uds.covariates <- inner_join(uds.3B, uds.4, by = c("Year","Grant Number")) 
+
+
+for (i in 3:ncol(uds.covariates)){
+  uds.covariates[,i] <- as.numeric(gsub("-", "", uds.covariates[,i]))
+}
+
+
+#uds.covariates %>% filter(`Grant Number` == "H80CS24200")
+
+uds.covariates <-  uds.covariates %>% 
+    mutate(Pct.NHA = NHA / Total * 100,
+         Pct.NHB = NHB / Total * 100,
+         Pct.HL = HL / Total * 100,
+         Pct.NHW = NHW / Total * 100,
+         Pct.ESL = Eng2ndLang / Total * 100,
+         Pct.LessThan100pctFPL = ifelse(Total == Unknown, 100, `<100%` / (Total- Unknown) * 100),
+         Pct.LessThan200pctFPL = ifelse(Total == Unknown, 100, (`<100%` + `101-150%` + `151-200%`) / (Total - Unknown) * 100),
+         Pct.FarmWorker = FarmWorker / Total * 100,
+         Pct.Homeless = Homeless / Total * 100,
+         Pct.Children = `0-17yo` / Total * 100) %>% 
+    select(Year, `Grant Number`, Pct.NHA:Pct.Children)
+
+
+
+```
+
+
+
+## Read in Clinical Outcomes
+```{r}
+uds.7.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table7_1", skip = 2) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+
+uds.7.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+
+uds.7.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+
+namevec <- c("Year", "Grant Number", "TotalDeliveries", "BirthsLT1500","Births1500to2499","BirthsGTE2500","TotalHTN","Sample","Controlcount")
+uds.7 <- rbind(cbind(Year = 2014, uds.7.2014),
+                  cbind(Year = 2015, uds.7.2015),
+                  cbind(Year = 2016, uds.7.2016),
+                  cbind(Year = 2017, uds.7.2017),
+                  
+                  cbind(Year = 2018, uds.7.2018),
+                  cbind(Year = 2019, uds.7.2019), 
+                  cbind(Year = 2020, uds.7.2020),
+                  cbind(Year = 2021, uds.7.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+for (i in 3:ncol(uds.7)){
+  uds.7[,i] <- as.numeric(gsub("-", "", uds.7[,i]))
+}
+
+```
+
+
+## Read in my financial data
+## Prep download
+```{r}
+
+cw <- read_excel("/Users/jhm65/Research/CHC Costs/UDS-990 Crosswalk.xlsx")
+
+## Wave 1
+
+EINs <- cw[!is.na(cw$EIN),]$EIN
+
+urls <- paste("https://www.guidestar.org/profile/GetFTASheet?ein=", cw[!is.na(cw$EIN),]$EIN, "&guid=", sep = "")
+destfiles <- paste("/Users/jhm65/Research/CHC Costs/990s/", cw[!is.na(cw$EIN),]$EIN, ".xlsx", sep = "") #990s_new or 990s
+
+
+## Set Binary filter for data to include
+z <- rep(NA, length(urls))
+for (k in 1:length(EINs)){  #1174
+  
+ z[k] <- ifelse(is.data.frame(try(read_excel(destfiles[k], skip = 5) )) == TRUE, 1, 0)
+  
+}
+
+
+## Set first rows in data
+chc.990 <- read_excel(destfiles[1], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+chc.990[,2] <- as.numeric(gsub(unlist(chc.990[,2]), pattern = "N/A", replacement = NA))
+chc.990[,3] <- as.numeric(gsub(unlist(chc.990[,3]), pattern = "N/A", replacement = NA))
+chc.990[,4] <- as.numeric(gsub(unlist(chc.990[,4]), pattern = "N/A", replacement = NA))
+chc.990[,5] <- as.numeric(gsub(unlist(chc.990[,5]), pattern = "N/A", replacement = NA))
+chc.990[,6] <- as.numeric(gsub(unlist(chc.990[,6]), pattern = "N/A", replacement = NA))
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.finances <- cbind(ID = EINs[1], year = years, chc.990)
+
+
+## Repeat for the whole set
+for (k in 2:1174){
+  if(z[k] == 1 & k %notin% c(388, 511, 670)){ ##remove entries for now, check later if this clinic gets data
+chc.990 <- read_excel(destfiles[k], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+  for (j in 2:ncol(chc.990)){
+    chc.990[,j] <- as.numeric(gsub(unlist(chc.990[,j]), pattern = "N/A", replacement = NA))
+  }
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.finances <- rbind(chc.finances, cbind(ID = EINs[k], year = years, chc.990) )} else {print(k)}
+}
+
+table(chc.finances$year)
+
+quantile(chc.finances$`Unrestricted surplus (deficit) after depreciation`, probs = c(0, 0.025, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975, 1))
+
+colnames(chc.finances) <- gsub("\\%", "pct", colnames(chc.finances))
+colnames(chc.finances)[c(4, 6)] <- c("Surplus as a pct of before dep expenses","Surplus as a pct of after dep expenses")
+
+
+
+
+
+## Wave 2
+
+EINs <- cw[!is.na(cw$EIN),]$EIN
+
+urls <- paste("https://www.guidestar.org/profile/GetFTASheet?ein=", cw[!is.na(cw$EIN),]$EIN, "&guid=", sep = "")
+destfiles <- paste("/Users/jhm65/Research/CHC Costs/990s_new/", cw[!is.na(cw$EIN),]$EIN, ".xlsx", sep = "") #990s_new or 990s
+
+
+## Set Binary filter for data to include
+z <- rep(NA, length(urls))
+for (k in 1:length(EINs)){  #1174
+  
+ z[k] <- ifelse(is.data.frame(try(read_excel(destfiles[k], skip = 5) )) == TRUE, 1, 0)
+  
+}
+
+
+## Set first rows in data
+chc.990 <- read_excel(destfiles[1], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+chc.990[,2] <- as.numeric(gsub(unlist(chc.990[,2]), pattern = "N/A", replacement = NA))
+chc.990[,3] <- as.numeric(gsub(unlist(chc.990[,3]), pattern = "N/A", replacement = NA))
+chc.990[,4] <- as.numeric(gsub(unlist(chc.990[,4]), pattern = "N/A", replacement = NA))
+chc.990[,5] <- as.numeric(gsub(unlist(chc.990[,5]), pattern = "N/A", replacement = NA))
+chc.990[,6] <- as.numeric(gsub(unlist(chc.990[,6]), pattern = "N/A", replacement = NA))
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.fin.2 <- cbind(ID = EINs[1], year = years, chc.990)
+
+
+## Repeat for the whole set
+for (k in 2:1174){
+  if(z[k] == 1 & k %notin% c(388, 511, 670)){ ##remove entries for now, check later if this clinic gets data
+chc.990 <- read_excel(destfiles[k], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+  for (j in 2:ncol(chc.990)){
+    chc.990[,j] <- as.numeric(gsub(unlist(chc.990[,j]), pattern = "N/A", replacement = NA))
+  }
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.fin.2 <- rbind(chc.fin.2, cbind(ID = EINs[k], year = years, chc.990) )} else {print(k)}
+}
+
+table(chc.fin.2$year)
+
+quantile(chc.fin.2$`Unrestricted surplus (deficit) after depreciation`, probs = c(0, 0.025, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975, 1))
+
+colnames(chc.fin.2) <- gsub("\\%", "pct", colnames(chc.fin.2))
+colnames(chc.fin.2)[c(4, 6)] <- c("Surplus as a pct of before dep expenses","Surplus as a pct of after dep expenses")
+
+nrow(chc.finances[chc.finances$`Unrestricted surplus (deficit) after depreciation` <= 250000 & chc.finances$year == 2017,]) / nrow(chc.finances[chc.finances$year == 2017,])
+
+```
+
+
+## Read in my termination crosswalk to filter out closures
+```{r}
+chc.term <- read.csv("CHC_termination_crosswalk.csv")
+staffing <- read.csv("/Users/jhm65/Research/CHC Costs/FQHC_Staffing.csv")
+```
+
+## Read in census data for all zip codes
+```{r}
+
+census <- data.frame(ZipCode = 0, NAME = 0, YEAR = 0, 
+                     TotalPop = 0,
+                     Male = 0, Female = 0, 
+                     AgeUnder18 = 0, Age18to64 = 0, Age65andOver = 0, 
+                     White = 0, Black = 0, AIAN = 0, Asian = 0, MR = 0, Hispanic = 0, EducLow = 0, EducMid = 0, EducHigh = 0, 
+                     PovertyStatusDet = 0, IncomeBelowPoverty = 0, Unemployed = 0, Unemp_denom = 0, 
+                     MCD.denom = 0, Medicaid = 0, Unins.denom = 0, Uninsured = 0)
+
+for (i in 1:7){
+  census <- rbind(census, get_acs(geography = "zcta", survey = "acs5",
+                       variables = c("B01003_001","B17001_001","B17001_002","B01001_002","B01001_026",
+                                     "B02001_002","B02001_003","B02001_004","B02001_005","B02001_006","B02001_008",
+                                     "B03001_003", 
+                                     "B01001_003","B01001_004","B01001_005","B01001_006","B01001_007","B01001_008","B01001_009",
+                                     "B01001_010","B01001_011","B01001_013","B01001_014","B01001_015","B01001_016","B01001_017",
+                                     "B01001_018","B01001_019","B01001_020","B01001_021","B01001_022","B01001_023","B01001_024","B01001_025",
+                                     "B01001_027","B01001_028","B01001_029","B01001_030","B01001_031","B01001_032","B01001_033","B01001_034",
+                                     "B01001_035","B01001_036","B01001_037","B01001_038","B01001_039","B01001_040","B01001_041","B01001_042","B01001_043",
+                                     "B01001_044","B01001_045","B01001_046","B01001_047","B01001_048","B01001_049",
+                                     "B06009_002","B06009_003", "B06009_004","B06009_005","B06009_006",
+                                     "B23025_002","B23025_005",
+                                     "C27007_001", "C27007_004", "C27007_007", "C27007_010", "C27007_014", "C27007_017", "C27007_020",
+                                     "B18135_001","B18135_007","B18135_012","B18135_018","B18135_023","B18135_029","B18135_034"), 
+                       year = 2013 + i) %>% 
+  pivot_wider(id_cols = c(GEOID, NAME), names_from = variable, values_from = estimate) %>% 
+    mutate(YEAR = 2013 + i, TotalPop = B01003_001, PovertyStatusDet = B17001_001, IncomeBelowPoverty = B17001_002,
+           AgeUnder18 = B01001_003 + B01001_004 + B01001_005 + B01001_006 + B01001_027 + B01001_028 + B01001_029 + B01001_030,
+           Age18to64 = B01001_007 + B01001_008 + B01001_009 + B01001_010 + B01001_011 + B01001_013 + B01001_014 + B01001_015 + 
+                       B01001_016 + B01001_017 + B01001_018 + B01001_019 + B01001_031 + B01001_032 + B01001_033 + B01001_034 +
+                       B01001_035 + B01001_036 + B01001_037 + B01001_038 + B01001_039 + B01001_040 + B01001_041 + B01001_042 + B01001_043, 
+           Age65andOver = B01001_020 + B01001_021 + B01001_022 + B01001_023 + B01001_024 + B01001_025 + 
+                          B01001_044 + B01001_045 + B01001_046 + B01001_047 + B01001_048 + B01001_049, 
+           Male = B01001_002, Female = B01001_026, 
+           White = B02001_002, Black = B02001_003, AIAN = B02001_004, Asian = B02001_005 + B02001_006, MR = B02001_008, 
+           Hispanic = B03001_003, 
+           EducLow = B06009_002, EducMid = B06009_003 + B06009_004, EducHigh = B06009_005 + B06009_006,
+           Unemployed = B23025_005, Unemp_denom = B23025_002,
+           MCD.denom = C27007_001	, Medicaid = C27007_004	 + C27007_007 + C27007_010	+ C27007_014 + C27007_017 + C27007_020,
+           Unins.denom = B18135_001, Uninsured = B18135_007 + B18135_012 + B18135_018 + B18135_023 + B18135_029 + B18135_034) %>% 
+    select(ZipCode = GEOID, NAME, YEAR, TotalPop:Uninsured))
+  
+  print(i)
+}
+census <- census[-1,]
+
+##########
+census$ZipCode <- substr(census$NAME, 7, 11)
+#census$ZipCode <- str_pad(census$ZipCode, 5, pad = "0")
+
+
+census %>% 
+  filter(YEAR == 2020) %>% 
+  select(ZipCode) %>% 
+  #unique() %>% 
+  table() %>% 
+  table()
+```
+
+
+
+# Analysis
+## SEt data again
+
+```{r}
+
+uds.sites[!is.na(uds.sites$Zip),] %>% 
+  group_by(`Grant Number`, Zip, Year) %>% 
+  summarise(Counts = n()) %>% 
+  select(`Grant Number`, Zip, Year, Counts) %>% 
+  unique() %>% 
+  arrange(Year) %>% 
+  pivot_wider(id_cols = c(`Grant Number`, Zip), names_from = Year, values_from = Counts, values_fill = 0) %>% 
+  arrange(Zip)
+  
+
+```
+
+
+
+## Set Data
+```{r}
+# Identify number of clinics in each zip code-year
+clinics.in.zips <- uds.sites[!is.na(uds.sites$Zip),] %>%
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`Grant Number`), Sites = n()) %>%
+  arrange(desc(Clinics))
+
+
+# Identify clinics in competitive zip codes
+clinics.comp <- uds.sites[!is.na(uds.sites$Zip),] %>% 
+  select(`Grant Number`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  pivot_wider(id_cols = `Grant Number`, names_from = Year, values_from = Clinics) %>% 
+  filter(`2014` == 1 & `2015` == 1 & `2016` == 1 ) %>%   
+  #filter(`2014` == 1 & `2015` == 1) %>%  
+  left_join(chc.term, by = c("Grant Number" = "ClinicID")) %>%
+  filter(is.na(NewClinicID)) %>%
+  select(`Grant Number`:`2021`) %>% 
+  pivot_longer(cols = c(`2014`:`2021`)) %>% 
+  group_by(`Grant Number`) %>% 
+  filter(min(value) == 1 ) %>% 
+  #filter(max(value) == last(value)) %>% 
+  mutate(Tx = ifelse(value > 1, 1, 0))
+
+
+# Classify clinics by introduction of competition
+df.comp <- left_join(clinics.comp %>% mutate(Year = as.numeric(name)), uds.zip.totals, by = c("Grant Number", "Year" = "Reporting Year")) %>% 
+  left_join(uds.sites[!is.na(uds.sites$Zip),] %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(Sites = n()), by = c("Grant Number", "Year")) %>% 
+  ungroup() %>% 
+  group_by(`Grant Number`) %>% 
+  mutate(Att = min(ifelse(Tx == 0, 2, 1)*Year, na.rm = TRUE) ) %>% 
+  group_by(`Grant Number`) %>% 
+  mutate(Att = ifelse(Att < 2022, Att, 0)) %>% 
+  ungroup() %>% 
+  mutate(ID = as.numeric(factor(`Grant Number`)))
+
+# Identify expandors vs expandees
+df.expand <- df.comp %>% 
+  left_join(
+      left_join(df.comp %>% select(`Grant Number`, Att), uds.sites[!is.na(uds.sites$Zip),] %>% 
+        select(`Grant Number`, Zip, Year) %>% 
+        group_by(`Grant Number`, Zip) %>% 
+        summarise(YearFirstInZip = min(Year)) %>% 
+        filter(YearFirstInZip %notin% c(2014)) %>% 
+        select(`Grant Number`, YearFirstInZip) %>% 
+        unique(), by = c("Grant Number")) %>% #filter(`Grant Number` == "H80CS00101") %>% 
+        mutate(Expandor = ifelse(is.na(YearFirstInZip) | Att != YearFirstInZip, 0, 1)) %>%  #  is.na(YearFirstInZip) | Att != YearFirstInZip
+        group_by(`Grant Number`) %>% summarise(Expandor = max(Expandor)), by = c("Grant Number")) %>% 
+  left_join(uds.HIT, by = c("Grant Number", "Year")) 
+
+
+df.expand <- df.expand %>% 
+  left_join(df.expand %>% filter(SwitchEMR == 1) %>%  
+            select(`Grant Number`, Year, SwitchEMR) %>% 
+            group_by(`Grant Number`) %>% 
+            summarise(FirstSwitch = min(Year)), by = c("Grant Number")) #%>% mutate(SwitchEMR = ifelse(is.na(FirstSwitch), 0, ifelse(Year >= FirstSwitch & FirstSwitch >= 2014, 1, 0)))
+
+
+df.qual.exp <- df.expand %>% 
+  left_join(uds.6b.rates, by = c("Grant Number" = "GrantNumber", "Year")) %>% 
+  left_join(uds.6b.denom, by = c("Grant Number" = "GrantNumber", "Year")) %>% 
+  #filter(Expandor == 0 & Year %in% c(2015, 2016, 2017, 2018, 2019, 2020) & Att %in% c(0, 2017, 2018, 2019, 2020)) %>%  ## Regular go to analysis
+  filter(Expandor == 0 & Year %in% c(2015, 2016, 2017, 2018, 2019) & Att %in% c(0, 2017, 2018, 2019)) %>%  ## Really pronounced causal responses, weak first order stuff
+  #filter(Expandor == 0 & Year %in% c(2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021) & Att %in% c(0, 2017, 2018, 2019)) %>%
+  left_join(uds.sites %>% 
+    group_by(`Grant Number`, Year) %>% 
+    summarise(TotalAccess = sum(Access, na.rm = T)), by = c("Grant Number","Year")) %>%
+inner_join(uds.sites %>% filter(Year == 2015) %>% select(`Grant Number`, Zip) %>% group_by(`Grant Number`) %>% summarise(Zips = n_distinct(Zip)), by = c("Grant Number")) %>%
+  mutate(ZipFilter = ifelse(Zips > 2.75, 2, 1)) %>% 
+#inner_join(uds.sites %>% filter(Year == 2014) %>% select(`Grant Number`, Zip) %>% group_by(`Grant Number`) %>% summarise(Zips = n_distinct(Zip)) %>% filter(Zips > 2.75), by = c("Grant Number")) %>%
+#inner_join(df.expand %>% filter(Year == 2015) %>% mutate(ZipFilter = ifelse(Total > median(Total), 2, 1)) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>%
+  mutate(l.Sites = log(Sites),
+         l.Total = log(Total))
+
+k = 1  # 1 for larger group, 0 for smaller clinic group OOOOOOORRRRRRR 2 for large, 1 for medium, and 0 for small
+
+
+
+# df.qual.exp <- inner_join(uds.sites %>% select(`Grant Number`, `Site State`) %>% unique(), df.qual.exp, by = c("Grant Number")) %>%
+# mutate(ACA = ifelse((`Site State` %in% c('MI','NH') & Year >= 2014) |
+#                     (`Site State` %in% c('PA','IN','AK') & Year >= 2015) |
+#                     (`Site State` %in% c('MT','LA') & Year >= 2016) |
+#                     (`Site State` %in% c('VA','ME') & Year >= 2019) |
+#                     (`Site State` %in% c('ID','UT','NE') & Year >= 2020) |
+#                     (`Site State` %in% c('OK','MO') & Year >= 2021) |
+#                     (`Site State` %in% c('AZ','AR','CA','CO','CT','DE','DC','HI','IL','IA','KY','MD','MA','MN','NV','NJ','NM','NY','ND','OH','OR','PA','RI','VT','VA','WA') & Year >= 2014), 1, 0)) %>%
+#   select(`Grant Number`, ZipFilter, value:ACA)
+
+# %>%
+#   group_by(`Grant Number`) %>%
+#   filter(max(ACA) == 0 | min(ACA) == 1) %>%
+#   ungroup()
+
+
+
+df.qual.exp <- df.qual.exp %>% 
+  mutate(
+    None = None / Total * 100,
+         MCR = MCR / Total * 100,
+         COM = COM / Total * 100,
+         MCD = MCD / Total * 100,
+    
+         SwitchEMR = SwitchEMR * 100, 
+         eScripts = eScripts* 100, 
+         eDecisionSupport = eDecisionSupport * 100, 
+         InterOrgHITexchange = InterOrgHITexchange * 100, 
+         PatientPortals = PatientPortals * 100, 
+         UDSQualRep.highlowuse = UDSQualRep.highlowuse * 100) %>% 
+  left_join(uds.covariates, by = c("Grant Number","Year")) %>% 
+  left_join(uds.7, by = c("Grant Number","Year")) %>% 
+  mutate(Pct.HBW = BirthsGTE2500 / TotalDeliveries * 100, 
+         Pct.HTN.CNTRL = Controlcount / Sample * 100) %>% 
+  
+  left_join(cw %>% select(`Grant Number`, EIN), by = c("Grant Number")) %>% 
+  left_join(unique(rbind(chc.finances, chc.fin.2) %>% group_by(ID, year) %>% summarise_all(max)) %>% 
+  arrange(ID, year), by = c("EIN" = "ID", "Year" = "year")) %>% 
+  mutate(Liabilities = `Liabilities (as pct of assets)` * `Total net assets`, 
+         Staffing = `Total expenses before depreciation` * Personnel, 
+         LBE.pct = `Gross land, buildings and equipment (LBE)` / `Total net assets`, 
+         `Liabilities (as pct of assets)` = `Liabilities (as pct of assets)` * 100, 
+         `Surplus as a pct of before dep expenses` = `Surplus as a pct of before dep expenses` * 100, 
+         Qcomp = (IMM2yo + Pap + ChildBMI + AdultBMI + Tobac + CRC + DepScrn) / 7, 
+         CostOfCare = `Total expenses before depreciation` / Total) %>% 
+  
+  mutate(Liquidity =  `Total net assets` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         Profitability =  `Unrestricted surplus (deficit) before depreciation` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         Efficiency = (`Total revenue (unrestricted & restricted)` - `Total expenses before depreciation`) / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         NetWorth = (100 - `Liabilities (as pct of assets)`) / `Liabilities (as pct of assets)` / 100) %>% 
+  mutate(Altmans.Z = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% # 6.56, 3.26, 6.72, 1.05  OR 0.18, 0.3, 0.81, 0.14
+  mutate(Liquidity = ifelse(Liquidity == 'Inf', NA, Liquidity), 
+         Profitability = ifelse(Profitability == 'Inf', NA, Profitability), 
+         Efficiency = ifelse(Efficiency == 'Inf', NA, Efficiency), 
+         NetWorth = ifelse(NetWorth == 'Inf', NA, NetWorth), 
+         Altmans.Z = ifelse(Altmans.Z == 'Inf', NA, Altmans.Z)) #%>%   filter(!is.na(Altmans.Z) & Altmans.Z != 'Inf')
+
+
+df.qual.exp %>%
+  group_by(Att, Expandor) %>%
+  summarise(n() / 6)
+
+df.qual.exp %>% 
+  group_by(Tx) %>% 
+  summarise(mean(Altmans.Z, na.rm = TRUE), sd(Altmans.Z, na.rm = TRUE))
+
+
+##########
+## Using penetration rate to filter instead of zip codes
+##########
+#IncomeBelowPoverty
+
+years <- unique(df.qual.exp$Year)
+
+#FQHC penetration rate by zip code
+temp1 <- uds.zip %>%
+  filter(`Reporting Year` == 2015 ) %>%
+  inner_join(uds.sites[!is.na(uds.sites$Zip),] %>%
+              filter(Year %in% years), by = c("Grant Number","Zip Code" = "Zip", "Reporting Year" = "Year")) %>%
+  select(`Grant Number`, `Reporting Year`, `Zip Code`, `Total Number of Patients`) %>%
+  left_join(census, by = c("Zip Code" = "ZipCode","Reporting Year" = "YEAR")) %>% #,"Reporting Year" = "YEAR"
+  mutate(MarketShare = `Total Number of Patients` / IncomeBelowPoverty) %>%#IncomeBelowPoverty or TotalPop
+  unique()
+
+temp1 %>% 
+  filter(`Reporting Year` == 2020)
+
+census %>% filter(YEAR == 2020)
+# FQHC weighted average penetration rate conditional on site in zip
+
+temp2 <- temp1 %>%
+  mutate(Num = IncomeBelowPoverty * MarketShare) %>%
+  group_by(`Grant Number`, `Reporting Year`) %>%
+  summarise(Num = sum(Num, na.rm = TRUE)) %>%
+  left_join(temp1 %>%
+  group_by(`Grant Number`, `Reporting Year`) %>%
+  summarise(YTotal = sum(IncomeBelowPoverty, na.rm = TRUE)), by = c("Grant Number","Reporting Year")) %>% #IncomeBelowPoverty
+  mutate(MarketShare = Num / YTotal) %>%
+  select(`Grant Number`, `Reporting Year`, MarketShare)
+
+
+
+df.qual.exp <- df.qual.exp %>%
+  select(`Grant Number`, value:Altmans.Z) %>% 
+  left_join(temp2, by = c("Grant Number")) %>% #,"Year" = "Reporting Year")) %>%
+  #mutate(ZipFilter = ifelse(MarketShare > median(MarketShare, na.rm = FALSE), 2,  # - 0.25
+  #                   ifelse(is.na(MarketShare) == T, 1, 1))) %>%
+  mutate(ZipFilter = ifelse(MarketShare >= median(MarketShare, na.rm = TRUE), 2, 1)) %>% #median(MarketShare, na.rm = TRUE)
+  select(`Grant Number`, ZipFilter, MarketShare, value:Altmans.Z) %>%
+  # inner_join(df.qual.exp %>% filter(Year == 2016) %>% mutate(Filter = ifelse(`Surplus as a pct of after dep expenses` < 0, 1, 
+  #                                                                     ifelse(`Surplus as a pct of after dep expenses` > 0.03, 2, NA))) %>% select(`Grant Number`, Filter), by = c("Grant Number")) %>% 
+  # select(`Grant Number`, ZipFilter, Filter, MarketShare, value:Altmans.Z) %>% 
+  #mutate(ZipFilter = Filter) %>% 
+  unique()
+
+
+summary(df.qual.exp$MarketShare)
+summary(df.qual.exp$Zips)
+summary(df.qual.exp$`Surplus as a pct of after dep expenses`)
+
+df.qual.exp %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n(), n_distinct(ID))
+df.qual.exp %>% filter(`Grant Number` == "H80CS00225")
+
+cnames <- colnames(df.qual.exp)
+
+
+
+
+compare <- read.csv("comeptition.data.final.csv")[,-1]
+colnames(compare) <- cnames
+
+# df.qual.exp <- compare
+# df.qual.exp <- df.qual.exp %>%
+#   #select(`Grant Number`:Year) %>%
+#   inner_join(compare %>% select(`Grant Number`, Year, value), by = c("Grant Number","Year")) %>%
+#   filter(value.x == value.y) %>%
+#   select(`Grant Number`:Altmans.Z) %>%
+#   rename(value = value.x)
+
+df.qual.exp <- df.qual.exp %>% rbind(compare %>% filter(`Grant Number` %in% c("H80CS00765","H80CS00881","H80CS02323") & Year %in% unique(df.qual.exp$Year) )) %>% 
+  filter(`Grant Number` != "H80CS00225")
+
+
+uds.sites[!is.na(uds.sites$Zip),] %>% 
+  #select(`Grant Number`, Zip, Year) %>% 
+  unique() %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
+
+# df.qual.exp %>% 
+#   select(`Grant Number`, Year, value) %>% 
+#   full_join(compare %>% select(`Grant Number`, Year, value), by = c("Grant Number","Year")) %>% 
+#   filter(is.na(value.x) | is.na(value.y))
+
+#write.csv(df.qual.exp, file = "comeptition.data.final_2.csv") DO NOT UNCOMMENT THIS LINE AS IT WILL OVERWRITE MY BACKUP DATA
+
+#df.qual.exp <- read.csv("comeptition.data.final_2.csv")
+
+
+## Add in urbanicity
+all.density <- uds.sites %>% 
+  filter(Year == 2016) %>% 
+  select(`Grant Number`, Zip) %>% 
+  unique()
+
+zipsize2 <- zctas(cb = TRUE, year = 2010)
+
+density.calc <- all.density %>% 
+  left_join(census %>% filter(YEAR == 2016), by = c("Zip" = "ZipCode")) %>% 
+  left_join(zipsize2 %>% select(ZCTA5, CENSUSAREA), by = c("Zip" = "ZCTA5")) %>% 
+  group_by(`Grant Number`) %>% 
+  mutate(num = sum(TotalPop, na.rm = TRUE), denom = sum(CENSUSAREA, na.rm = TRUE)) %>% 
+  mutate(Density = num / denom) %>% 
+  mutate(Pct.Rural = ifelse(Density < 500, 1, 0), 
+         Pct.Urban = ifelse(Density > 2500, 1, 0)) %>% 
+  select(`Grant Number`, Density, Pct.Rural, Pct.Urban) %>% 
+  unique()
+
+df.qual.exp <- df.qual.exp %>% 
+  left_join(density.calc, by = c("Grant Number")) #%>% mutate(ZipFilter = ifelse(Density >= median(Density), 2, 1))
+
+
+
+
+
+df.expand %>% 
+  filter(`Grant Number` == "H80CS00101")
+
+uds.sites %>% filter(`Grant Number` == "H80CS00101") %>% 
+  group_by(Zip) %>% 
+  summarise(min(Year))
+```
+
+

@@ -1,0 +1,3454 @@
+---
+title: "220410_Competition"
+author: "Justin"
+date: "4/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Library 
+```{r}
+library(tidygeocoder)
+library(tidyverse)
+library(did)
+library(tidycensus)
+library(gtsummary)
+library(readxl)
+library(sandwich)
+library(lmtest)
+library(ggpubr)
+library(kableExtra)
+library(tigris)
+
+library(gridExtra)
+library(cowplot)
+library(Matching)
+library(fixest)
+library(directlabels)
+
+`%notin%` <- Negate(`%in%`)
+
+select <- dplyr::select
+
+#Sys.setenv('R_MAX_VSIZE'=32000000000)
+  
+```
+
+## Define new Tufte data theme
+```{r, echo = FALSE, results = "asis", message=FALSE, warning = FALSE, fig.align="center"}
+
+is.extrafont.installed <- function(){
+  if(is.element("extrafont", installed.packages()[,1])){
+    library(extrafont)
+    # probably need something here to run font_import()
+    return(T)
+  }else{
+    warning("Library extrafont installed; using system sans/serif libraries as fallback fonts. 
+    To enable full font support, run: 
+      install.packages('extrafont') 
+      font_import()")
+    return(F)
+  }
+}
+
+
+
+# set font
+base_font_family_tufte <- function(){
+  if(is.extrafont.installed()){
+    library(extrafont)
+    tuftefont <- choose_font(c("Gill Sans MT", "Gill Sans", "GillSans", "Verdana", "serif"), quiet = FALSE)  
+  }else{
+    tuftefont <- "serif"
+  }
+  return(tuftefont)
+}
+
+theme_tufte_revised <- function(base_size = 11, base_family = base_font_family_tufte(), ticks = TRUE) {
+  
+  ret <- theme_bw(base_family = base_family, base_size = base_size) + 
+    theme(
+      axis.line = element_line(color = 'black'),
+      axis.title.x = element_text(vjust = -0.3), 
+      axis.title.y = element_text(vjust = 0.8),
+      legend.background = element_blank(), 
+      legend.key = element_blank(), 
+      legend.title = element_text(face="plain"),
+      panel.background = element_blank(), 
+      panel.border = element_blank(),
+      panel.grid = element_blank(),
+      plot.background = element_blank(),
+      strip.background = element_blank()
+    )
+  
+  if (!ticks) {
+    ret <- ret + theme(axis.ticks = element_blank())
+  }
+  
+  ret
+} 
+
+```
+
+
+
+
+
+
+# Data
+
+## Read in UDS 
+
+```{r}
+
+## Zips
+locs <- paste("UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
+uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes") 
+
+new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
+colnames(uds.zip) <-    new.zip.names
+
+for(i in 2:length(locs)){
+  temp.zip <- read_excel(locs[i], sheet = "HealthCenterZipCodes")
+  colnames(temp.zip) <- new.zip.names
+  uds.zip <- rbind(uds.zip, temp.zip %>% mutate(`Zip Code` = str_pad(`Zip Code`, 5, pad = "0")))
+}
+
+## Rename
+new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" )
+colnames(uds.zip) <-    new.zip.names
+
+
+## Clean
+
+uds.zip[uds.zip$`Total Number of Patients`== '-' | uds.zip$`Total Number of Patients`== '--',]$`Total Number of Patients` <- NA
+uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
+uds.zip <- uds.zip[!is.na(uds.zip$`Total Number of Patients`),] %>%
+    mutate(`Reporting Year` = as.numeric(`Reporting Year`))
+
+uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
+uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
+uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
+uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
+
+
+uds.zip <- cbind(uds.zip, broken.total = rowSums(uds.zip[,c(6:9)], na.rm = TRUE), missings = rowSums(is.na(uds.zip[,c(6:9)]))) %>%
+  mutate(`Total Number of Patients` = as.numeric(`Total Number of Patients`)) %>%
+  mutate(`Total Number of Patients` = ifelse(is.na(`Total Number of Patients`), round(missings*16/4), `Total Number of Patients`)) %>%
+  mutate(`None_Uninsured Patients` = ifelse(is.na(`None_Uninsured Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `None_Uninsured Patients`),
+         `Medicaid_CHIP_Other Public Patients` = ifelse(is.na(`Medicaid_CHIP_Other Public Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicaid_CHIP_Other Public Patients`),
+         `Medicare Patients` = ifelse(is.na(`Medicare Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicare Patients`),
+         `Private Patients` = ifelse(is.na(`Private Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Private Patients`))
+
+# ## Old version with missingness still in there  
+# uds.zip$`Reporting Year` <- as.numeric(uds.zip$`Reporting Year`)
+# uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
+# uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
+# uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
+# uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
+# uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
+# 
+# 
+# uds.zip[is.na(uds.zip$`Total Number of Patients`),]$`Total Number of Patients` <- 0
+# uds.zip[grep("-", uds.zip$`None_Uninsured Patients`),]$`None_Uninsured Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicaid_CHIP_Other Public Patients`),]$`Medicaid_CHIP_Other Public Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicare Patients`),]$`Medicare Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Private Patients`),]$`Private Patients` <- 0
+# 
+uds.zip.totals <- uds.zip %>%
+  select(`Grant Number`, `Reporting Year`, `None_Uninsured Patients`:`Total Number of Patients`) %>%
+  group_by(`Grant Number`, `Reporting Year`) %>% summarise(None = sum(`None_Uninsured Patients`, na.rm = T),
+                                                           MCR = sum(`Medicare Patients`, na.rm = T),
+                                                           COM = sum(`Private Patients`, na.rm = T),
+                                                           MCD = sum(`Medicaid_CHIP_Other Public Patients`, na.rm = T),
+                                                           Total = sum(`Total Number of Patients`, na.rm = T))
+
+uds.zip <- uds.zip[uds.zip$`Zip Code Type` == "ZipCode",]
+
+
+
+
+
+## Sites
+locs <- paste("UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
+
+uds.sites <- read_excel(locs[1], sheet = "HealthCenterSiteInfo") %>% 
+  select(GrantNumber, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2014)
+
+
+colnames(uds.sites) <- c("Grant Number", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+for(i in 2:(length(locs)-1)){
+  uds.sites <- rbind(uds.sites, read_excel(locs[i], sheet = "HealthCenterSiteInfo") %>% 
+                       select("Grant Number", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code") %>% 
+  mutate(Year = 2013 + i))
+}
+
+temp.sites <- read_excel(locs[i+1], sheet = "HealthCenterSiteInfo" )%>% 
+  select(GrantNumber, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2021)
+colnames(temp.sites) <- c("Grant Number", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+uds.sites <- rbind(uds.sites, temp.sites)
+
+
+uds.sites$Zip <- substr(uds.sites$`Site ZIP Code`, 1, 5)
+
+uds.sites <- uds.sites %>% 
+  filter(`Site State` %notin% c('AK','HI','GU','VI','PW','MH','AS','FM','PR','MP'))
+
+uds.sites[grep(pattern = "-", uds.sites$Zip),]$Zip <- NA
+
+
+```
+
+
+
+## Clean up some of the missing zip codes
+
+```{r}
+
+tbcoded <- uds.sites[is.na(uds.sites$Zip),]
+coded <- geo(street = tbcoded[c(1:1000),]$`Site Street Address`, 
+             city = tbcoded[c(1:1000),]$`Site City`, 
+             state = tbcoded[c(1:1000),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE)
+
+for (g in 1:9){
+  g
+coded <- rbind(coded, 
+               geo(street = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site Street Address`, 
+             city = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site City`, 
+             state = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+}
+
+coded <- rbind(coded, 
+               geo(street = tbcoded[c(10001:10975),]$`Site Street Address`, 
+             city = tbcoded[c(10001:10975),]$`Site City`, 
+             state = tbcoded[c(10001:10975),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+
+
+coded[grep(pattern = "[[:digit:]]{5}$", coded$matched_address),]
+
+
+uds.sites[is.na(uds.sites$Zip),]$Zip <- str_extract(coded$matched_address, pattern = "[[:digit:]]{5}$")
+uds.sites[is.na(uds.sites$Zip),]
+
+uds.sites.temp <- uds.sites
+
+```
+
+
+
+
+```{r}
+
+uds.sites <- uds.sites.temp
+
+uds.sites.temp %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
+
+chc <- read.csv("chc.csv")
+
+chc %>% filter(Health.Center.Number %in% c("H80CS00881"))
+
+
+
+uds.sites[is.na(uds.sites$Zip),] <- uds.sites[is.na(uds.sites$Zip),] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Street Address" = "Site.Address")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`Grant Number`:Zip) %>%
+  unique()
+
+uds.sites[is.na(uds.sites$Zip),] <- uds.sites[is.na(uds.sites$Zip),] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Name" = "Site.Name")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`Grant Number`:Zip) %>%
+  unique()
+
+uds.sites[is.na(uds.sites$Zip),] 
+```
+
+
+
+
+```{r}
+
+
+table(uds.sites.temp$`Location Setting`)
+
+
+uds.sites <- uds.sites %>% #filter(`Location Type` == "Permanent" & `Location Setting` %in% c("All Other Clinic Types")) %>% 
+  mutate(Access = as.numeric(ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Full-Time", 40, 
+                  ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Part-Time", 10, `Total Weekly Hours Of Operation`))))
+
+uds.sites[is.na(uds.sites$Zip),] 
+
+uds.sites %>% 
+  arrange(`Total Weekly Hours Of Operation`, `Operational Schedule` )
+
+
+# z <- geocode(chc.term$SitePhysicalAddress)
+# 
+# 
+# y <- geo(address = chc.term$SitePhysicalAddress, method = "census")
+# 
+# write.csv(cbind(y[,1], y[,3], y[,2], z), file = "geocodedClosures.csv")
+
+
+```
+
+
+
+## Read in Quality data
+```{r}
+
+
+uds.6b.2012 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2013 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 1) 
+uds.6b.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+
+# rbind(
+# colnames(uds.6b.2014[,c(2, grep(pattern = "^%", colnames(uds.6b.2014))[-6])]),
+# colnames(uds.6b.2015[,c(2, grep(pattern = "^%", colnames(uds.6b.2015))[-6])]),
+# colnames(uds.6b.2016[,c(2, grep(pattern = "^%", colnames(uds.6b.2016))[-6])]),
+# colnames(uds.6b.2017[,c(2, grep(pattern = "^%", colnames(uds.6b.2017))[-6])]),
+# colnames(uds.6b.2018[,c(2, grep(pattern = "^%", colnames(uds.6b.2018))[-6])]),
+# colnames(uds.6b.2019[,c(2, grep(pattern = "^%", colnames(uds.6b.2019))[-6])]),
+# colnames(uds.6b.2020[,c(2, grep(pattern = "^%", colnames(uds.6b.2020))[-c(3, 11, 13)])]))
+# 
+# 
+# rbind(
+# colnames(uds.6b.2014[,c(2, grep(pattern = "^Total", colnames(uds.6b.2014))[-6])]),
+# colnames(uds.6b.2015[,c(2, grep(pattern = "^Total", colnames(uds.6b.2015))[-6])]),
+# colnames(uds.6b.2016[,c(2, grep(pattern = "^Total", colnames(uds.6b.2016))[-6])]),
+# colnames(uds.6b.2017[,c(2, grep(pattern = "^Total", colnames(uds.6b.2017))[-6])]),
+# colnames(uds.6b.2018[,c(2, grep(pattern = "^Total", colnames(uds.6b.2018))[-6])]),
+# colnames(uds.6b.2019[,c(2, grep(pattern = "^Total", colnames(uds.6b.2019))[-6])]),
+# colnames(uds.6b.2020[,c(2, grep(pattern = "^Total", colnames(uds.6b.2020))[-c(3, 11, 13)])]))
+
+
+
+
+
+namingshit <- c("GrantNumber", "IMM2yo", "Pap", "ChildBMI","AdultBMI","Tobac","CRC","DepScrn")
+namingshit.denom <- c("GrantNumber", "IMM2yo.denom", "Pap.denom", "ChildBMI.denom","AdultBMI.denom","Tobac.denom","CRC.denom","DepScrn.denom")
+
+uds.6b.rates <- rbind(
+  uds.6b.2014[,c(2, grep(pattern = "^%", colnames(uds.6b.2014))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2014), 
+  uds.6b.2015[,c(2, grep(pattern = "^%", colnames(uds.6b.2015))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2015),
+  uds.6b.2016[,c(2, grep(pattern = "^%", colnames(uds.6b.2016))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2016),
+  
+  uds.6b.2017[,c(2, grep(pattern = "^%", colnames(uds.6b.2017))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2017),
+  uds.6b.2018[,c(2, grep(pattern = "^%", colnames(uds.6b.2018))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2018),
+  
+  uds.6b.2019[,c(2, grep(pattern = "^%", colnames(uds.6b.2019))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2019),
+  uds.6b.2020[,c(2, grep(pattern = "^%", colnames(uds.6b.2020))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2020), 
+  uds.6b.2021[,c(2, grep(pattern = "^%", colnames(uds.6b.2021))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit), function(x) namingshit) %>% mutate(Year = 2021))
+
+uds.6b.rates$IMM2yo <- gsub(pattern = "%$", replacement = "", uds.6b.rates$IMM2yo)
+uds.6b.rates$Pap <- gsub(pattern = "%$", replacement = "", uds.6b.rates$Pap)
+uds.6b.rates$ChildBMI <- gsub(pattern = "%$", replacement = "", uds.6b.rates$ChildBMI)
+uds.6b.rates$AdultBMI <- gsub(pattern = "%$", replacement = "", uds.6b.rates$AdultBMI)
+
+uds.6b.rates$Tobac <- gsub(pattern = "%$", replacement = "", uds.6b.rates$Tobac)
+uds.6b.rates$CRC <- gsub(pattern = "%$", replacement = "", uds.6b.rates$CRC)
+uds.6b.rates$DepScrn <- gsub(pattern = "%$", replacement = "", uds.6b.rates$DepScrn)
+
+
+uds.6b.denom <- rbind(
+  uds.6b.2014[,c(2, grep(pattern = "^Total", colnames(uds.6b.2014))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2014), 
+  uds.6b.2015[,c(2, grep(pattern = "^Total", colnames(uds.6b.2015))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2015),
+  uds.6b.2016[,c(2, grep(pattern = "^Total", colnames(uds.6b.2016))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2016),
+  
+  uds.6b.2017[,c(2, grep(pattern = "^Total", colnames(uds.6b.2017))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2017),
+  uds.6b.2018[,c(2, grep(pattern = "^Total", colnames(uds.6b.2018))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2018),
+  
+  uds.6b.2019[,c(2, grep(pattern = "^Total", colnames(uds.6b.2019))[-6])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2019),
+  uds.6b.2020[,c(2, grep(pattern = "^Total", colnames(uds.6b.2020))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2020),
+  uds.6b.2021[,c(2, grep(pattern = "^Total", colnames(uds.6b.2021))[-c(3, 11, 13)])][,c(1:6, 9, 11)] %>% 
+  rename_all(vars(namingshit.denom), function(x) namingshit.denom) %>% mutate(Year = 2021))
+
+
+
+for (k in 2:8) uds.6b.rates[grep("-", unlist(uds.6b.rates[,k])),k] <- NA
+for (k in 2:8) uds.6b.denom[grep("-", unlist(uds.6b.denom[,k])),k] <- NA
+
+
+uds.6b.rates <-  data.frame(GrantNumber = uds.6b.rates$GrantNumber, Year = uds.6b.rates$Year, lapply(uds.6b.rates[,c(2:8)], as.numeric)) 
+uds.6b.denom <-  data.frame(GrantNumber = uds.6b.denom$GrantNumber, Year = uds.6b.denom$Year, lapply(uds.6b.denom[,c(2:8)], as.numeric))
+
+uds.6b.rates[uds.6b.rates$Year == 2014,c(3:9)] <- uds.6b.rates[uds.6b.rates$Year == 2014,c(3:9)] * 100
+uds.6b.rates[,c(3:9)] <- uds.6b.rates[,c(3:9)] 
+
+## Finding highest-scoring quality FQHC
+# uds.6b.rates %>% 
+#   mutate(Qcomp = (IMM2yo + Pap + ChildBMI + AdultBMI + Tobac + CRC + DepScrn) / 7) %>% 
+#   arrange(desc(Qcomp)) %>% 
+#   filter(Year == 2021) %>% 
+#   select(GrantNumber, Year, Qcomp) %>% 
+#   left_join(chc %>% select(Health.Center.Number, Health.Center.Name, Health.Center.Organization.City, Health.Center.Organization.State) %>% unique(), by = c("GrantNumber" = "Health.Center.Number")) %>% 
+#   left_join(uds.6b.denom, by = c("GrantNumber","Year")) 
+
+
+```
+
+
+## Read in Technology Data
+```{r}
+
+uds.HIT.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 0) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 2) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+
+uds.HIT.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+
+uds.HIT.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>%
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)
+uds.HIT.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "HITInformation", skip = 0) %>%
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)
+
+uds.HIT.2020 <- data.frame(GrantNumber = uds.HIT.2020[,1], Tehr_L1b_Ca = uds.HIT.2020[,2], Tehr_L2_Ca = NA,	Tehr_L3_Ca = NA, Tehr_L4_Ca = uds.HIT.2020[,3], Tehr_L5_Ca = NA, Tehr_L7_Ca = uds.HIT.2020[,4])
+uds.HIT.2021 <- data.frame(GrantNumber = uds.HIT.2021[,1], Tehr_L1b_Ca = uds.HIT.2021[,2], Tehr_L2_Ca = NA,	Tehr_L3_Ca = NA, Tehr_L4_Ca = uds.HIT.2021[,3], Tehr_L5_Ca = NA, Tehr_L7_Ca = uds.HIT.2021[,4])
+
+
+
+
+namevec <- c("Year", "Grant Number", "SwitchEMR","eScripts","eDecisionSupport","InterOrgHITexchange","PatientPortals","UDSQualRep")
+uds.HIT <- rbind(cbind(Year = 2014, uds.HIT.2014),
+                  cbind(Year = 2015, uds.HIT.2015),
+                  cbind(Year = 2016, uds.HIT.2016),
+                  cbind(Year = 2017, uds.HIT.2017),
+                  
+                  cbind(Year = 2018, uds.HIT.2018),
+                  cbind(Year = 2019, uds.HIT.2019), 
+                  cbind(Year = 2020, uds.HIT.2020),
+                  cbind(Year = 2021, uds.HIT.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec) %>% 
+  mutate(UDSQualRep.levels = ifelse(UDSQualRep == "-", NA, 
+                             ifelse(UDSQualRep == "We do not use the EHR", 0, 
+                             ifelse(UDSQualRep == "We use the EHR but only to access individual patient charts", 1, 
+                             ifelse(UDSQualRep == "We use the EHR in combination with another data analytic system", 3, 2))))) %>% 
+  mutate(UDSQualRep.highlowuse = ifelse(UDSQualRep == "-", NA, 
+                             ifelse(UDSQualRep == "We do not use the EHR" | UDSQualRep == "We use the EHR but only to access individual patient charts", 0, 1))) %>%  
+  mutate(SwitchEMR = ifelse(SwitchEMR == "-", NA, ifelse(SwitchEMR == "Yes", 1, 0)),
+         eScripts = ifelse(eScripts == "-" | eScripts == "Not Sure", NA, ifelse(eScripts == "Yes", 1, 0)),
+         eDecisionSupport = ifelse(eDecisionSupport == "-" | eDecisionSupport == "Not Sure", NA, ifelse(eDecisionSupport == "Yes", 1, 0)),
+         InterOrgHITexchange = ifelse(InterOrgHITexchange == "-" | InterOrgHITexchange == "Not Sure", NA, ifelse(InterOrgHITexchange %in% c("No","None of the above"), 0, 1)),
+         PatientPortals = ifelse(PatientPortals == "-" | PatientPortals == "Not Sure", NA, ifelse(PatientPortals %in% c("No","No we do not engage patients using HIT"), 0, 1)))
+
+
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$SwitchEMR),]$SwitchEMR <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$eScripts),]$eScripts <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$eDecisionSupport),]$eDecisionSupport <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$InterOrgHITexchange),]$InterOrgHITexchange <- 0
+uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.na(uds.HIT$PatientPortals),]$PatientPortals <- 0
+
+
+# namevec <- c("Year", "Grant Number", "SwitchEMR","InterOrgHITexchange","UDSQualRep")
+# uds.HIT <- rbind(cbind(Year = 2014, uds.HIT.2014 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2015, uds.HIT.2015 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2016, uds.HIT.2016 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2017, uds.HIT.2017 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   
+#                   cbind(Year = 2018, uds.HIT.2018 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),
+#                   cbind(Year = 2019, uds.HIT.2019 %>% select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)),          
+#                   cbind(Year = 2020, uds.HIT.2020)) %>% 
+#   
+#   rename_all(vars(namevec), function(x) namevec) %>% 
+#   mutate(UDSQualRep.levels = ifelse(UDSQualRep == "-", NA, 
+#                              ifelse(UDSQualRep == "We do not use the EHR", 0, 
+#                              ifelse(UDSQualRep == "We use the EHR but only to access individual patient charts", 1, 
+#                              ifelse(UDSQualRep == "We use the EHR in combination with another data analytic system", 3, 2))))) %>% 
+#   mutate(UDSQualRep.highlowuse = ifelse(UDSQualRep == "-", NA, 
+#                              ifelse(UDSQualRep == "We do not use the EHR" | UDSQualRep == "We use the EHR but only to access individual patient charts", 0, 1))) %>%  
+#   mutate(SwitchEMR = ifelse(SwitchEMR == "-", NA, ifelse(SwitchEMR == "Yes", 1, 0)),
+#          InterOrgHITexchange = ifelse(InterOrgHITexchange == "-" | InterOrgHITexchange == "Not Sure", NA, ifelse(InterOrgHITexchange %in% c("No","None of the above"), 0, 1)))
+
+```
+
+
+
+
+## Read in Covariates
+```{r}
+# Table 3B
+uds.3B.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table3B", skip = 2) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+uds.3B.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+uds.3B.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+namevec <- c("Year", "Grant Number", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLang")
+uds.3B <- rbind(cbind(Year = 2014, uds.3B.2014),
+                  cbind(Year = 2015, uds.3B.2015),
+                  cbind(Year = 2016, uds.3B.2016),
+                  cbind(Year = 2017, uds.3B.2017),
+                  
+                  cbind(Year = 2018, uds.3B.2018),
+                  cbind(Year = 2019, uds.3B.2019), 
+                  cbind(Year = 2020, uds.3B.2020),
+                  cbind(Year = 2021, uds.3B.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+
+
+
+# Table 4
+uds.4.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table4", skip = 2) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+
+uds.4.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+
+uds.4.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+
+namevec <- c("Year", "Grant Number", "<100%", "101-150%", "151-200%", ">200%", "Unknown", "FarmWorker", "Homeless", "0-17yo", "18+yo")
+uds.4 <- rbind(cbind(Year = 2014, uds.4.2014),
+                  cbind(Year = 2015, uds.4.2015),
+                  cbind(Year = 2016, uds.4.2016),
+                  cbind(Year = 2017, uds.4.2017),
+                  
+                  cbind(Year = 2018, uds.4.2018),
+                  cbind(Year = 2019, uds.4.2019), 
+                  cbind(Year = 2020, uds.4.2020),
+                  cbind(Year = 2021, uds.4.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+
+
+
+# Put covariate tables together
+
+uds.covariates <- inner_join(uds.3B, uds.4, by = c("Year","Grant Number")) 
+
+
+for (i in 3:ncol(uds.covariates)){
+  uds.covariates[,i] <- as.numeric(gsub("-", "", uds.covariates[,i]))
+}
+
+
+#uds.covariates %>% filter(`Grant Number` == "H80CS24200")
+
+uds.covariates <-  uds.covariates %>% 
+    mutate(Pct.NHA = NHA / Total * 100,
+         Pct.NHB = NHB / Total * 100,
+         Pct.HL = HL / Total * 100,
+         Pct.NHW = NHW / Total * 100,
+         Pct.ESL = Eng2ndLang / Total * 100,
+         Pct.LessThan100pctFPL = ifelse(Total == Unknown, 100, `<100%` / (Total- Unknown) * 100),
+         Pct.LessThan200pctFPL = ifelse(Total == Unknown, 100, (`<100%` + `101-150%` + `151-200%`) / (Total - Unknown) * 100),
+         Pct.FarmWorker = FarmWorker / Total * 100,
+         Pct.Homeless = Homeless / Total * 100,
+         Pct.Children = `0-17yo` / Total * 100) %>% 
+    select(Year, `Grant Number`, Pct.NHA:Pct.Children)
+
+
+
+```
+
+
+
+## Read in Clinical Outcomes
+```{r}
+uds.7.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table7_1", skip = 2) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+
+uds.7.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+
+uds.7.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+
+namevec <- c("Year", "Grant Number", "TotalDeliveries", "BirthsLT1500","Births1500to2499","BirthsGTE2500","TotalHTN","Sample","Controlcount")
+uds.7 <- rbind(cbind(Year = 2014, uds.7.2014),
+                  cbind(Year = 2015, uds.7.2015),
+                  cbind(Year = 2016, uds.7.2016),
+                  cbind(Year = 2017, uds.7.2017),
+                  
+                  cbind(Year = 2018, uds.7.2018),
+                  cbind(Year = 2019, uds.7.2019), 
+                  cbind(Year = 2020, uds.7.2020),
+                  cbind(Year = 2021, uds.7.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+for (i in 3:ncol(uds.7)){
+  uds.7[,i] <- as.numeric(gsub("-", "", uds.7[,i]))
+}
+
+```
+
+
+## Read in my financial data
+## Prep download
+```{r}
+
+cw <- read_excel("/Users/jhm65/Research/CHC Costs/UDS-990 Crosswalk.xlsx")
+
+## Wave 1
+
+EINs <- cw[!is.na(cw$EIN),]$EIN
+
+urls <- paste("https://www.guidestar.org/profile/GetFTASheet?ein=", cw[!is.na(cw$EIN),]$EIN, "&guid=", sep = "")
+destfiles <- paste("/Users/jhm65/Research/CHC Costs/990s/", cw[!is.na(cw$EIN),]$EIN, ".xlsx", sep = "") #990s_new or 990s
+
+
+## Set Binary filter for data to include
+z <- rep(NA, length(urls))
+for (k in 1:length(EINs)){  #1174
+  
+ z[k] <- ifelse(is.data.frame(try(read_excel(destfiles[k], skip = 5) )) == TRUE, 1, 0)
+  
+}
+
+
+## Set first rows in data
+chc.990 <- read_excel(destfiles[1], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+chc.990[,2] <- as.numeric(gsub(unlist(chc.990[,2]), pattern = "N/A", replacement = NA))
+chc.990[,3] <- as.numeric(gsub(unlist(chc.990[,3]), pattern = "N/A", replacement = NA))
+chc.990[,4] <- as.numeric(gsub(unlist(chc.990[,4]), pattern = "N/A", replacement = NA))
+chc.990[,5] <- as.numeric(gsub(unlist(chc.990[,5]), pattern = "N/A", replacement = NA))
+chc.990[,6] <- as.numeric(gsub(unlist(chc.990[,6]), pattern = "N/A", replacement = NA))
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.finances <- cbind(ID = EINs[1], year = years, chc.990)
+
+
+## Repeat for the whole set
+for (k in 2:1174){
+  if(z[k] == 1 & k %notin% c(388, 511, 670)){ ##remove entries for now, check later if this clinic gets data
+chc.990 <- read_excel(destfiles[k], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+  for (j in 2:ncol(chc.990)){
+    chc.990[,j] <- as.numeric(gsub(unlist(chc.990[,j]), pattern = "N/A", replacement = NA))
+  }
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.finances <- rbind(chc.finances, cbind(ID = EINs[k], year = years, chc.990) )} else {print(k)}
+}
+
+table(chc.finances$year)
+
+quantile(chc.finances$`Unrestricted surplus (deficit) after depreciation`, probs = c(0, 0.025, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975, 1))
+
+colnames(chc.finances) <- gsub("\\%", "pct", colnames(chc.finances))
+colnames(chc.finances)[c(4, 6)] <- c("Surplus as a pct of before dep expenses","Surplus as a pct of after dep expenses")
+
+
+
+
+
+## Wave 2
+
+EINs <- cw[!is.na(cw$EIN),]$EIN
+
+urls <- paste("https://www.guidestar.org/profile/GetFTASheet?ein=", cw[!is.na(cw$EIN),]$EIN, "&guid=", sep = "")
+destfiles <- paste("/Users/jhm65/Research/CHC Costs/990s_new/", cw[!is.na(cw$EIN),]$EIN, ".xlsx", sep = "") #990s_new or 990s
+
+
+## Set Binary filter for data to include
+z <- rep(NA, length(urls))
+for (k in 1:length(EINs)){  #1174
+  
+ z[k] <- ifelse(is.data.frame(try(read_excel(destfiles[k], skip = 5) )) == TRUE, 1, 0)
+  
+}
+
+
+## Set first rows in data
+chc.990 <- read_excel(destfiles[1], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+chc.990[,2] <- as.numeric(gsub(unlist(chc.990[,2]), pattern = "N/A", replacement = NA))
+chc.990[,3] <- as.numeric(gsub(unlist(chc.990[,3]), pattern = "N/A", replacement = NA))
+chc.990[,4] <- as.numeric(gsub(unlist(chc.990[,4]), pattern = "N/A", replacement = NA))
+chc.990[,5] <- as.numeric(gsub(unlist(chc.990[,5]), pattern = "N/A", replacement = NA))
+chc.990[,6] <- as.numeric(gsub(unlist(chc.990[,6]), pattern = "N/A", replacement = NA))
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.fin.2 <- cbind(ID = EINs[1], year = years, chc.990)
+
+
+## Repeat for the whole set
+for (k in 2:1174){
+  if(z[k] == 1 & k %notin% c(388, 511, 670)){ ##remove entries for now, check later if this clinic gets data
+chc.990 <- read_excel(destfiles[k], skip = 5)
+years <- as.numeric(colnames(chc.990)[-1])
+chc.990 <- chc.990[-c(5, 6, 15, 16, 25, 26, 32, 33, 34, 35, 39, 40, 52:58),]
+
+  for (j in 2:ncol(chc.990)){
+    chc.990[,j] <- as.numeric(gsub(unlist(chc.990[,j]), pattern = "N/A", replacement = NA))
+  }
+
+headers <- unlist(chc.990[,1])
+chc.990 <- data.frame(t(chc.990[,-1]))
+
+colnames(chc.990) <- headers
+rownames(chc.990) <- NULL
+
+chc.fin.2 <- rbind(chc.fin.2, cbind(ID = EINs[k], year = years, chc.990) )} else {print(k)}
+}
+
+table(chc.fin.2$year)
+
+quantile(chc.fin.2$`Unrestricted surplus (deficit) after depreciation`, probs = c(0, 0.025, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975, 1))
+
+colnames(chc.fin.2) <- gsub("\\%", "pct", colnames(chc.fin.2))
+colnames(chc.fin.2)[c(4, 6)] <- c("Surplus as a pct of before dep expenses","Surplus as a pct of after dep expenses")
+
+nrow(chc.finances[chc.finances$`Unrestricted surplus (deficit) after depreciation` <= 250000 & chc.finances$year == 2017,]) / nrow(chc.finances[chc.finances$year == 2017,])
+
+```
+
+
+## Read in my termination crosswalk to filter out closures
+```{r}
+chc.term <- read.csv("CHC_termination_crosswalk.csv")
+staffing <- read.csv("/Users/jhm65/Research/CHC Costs/FQHC_Staffing.csv")
+```
+
+## Read in census data for all zip codes
+```{r}
+
+census <- data.frame(ZipCode = 0, NAME = 0, YEAR = 0, 
+                     TotalPop = 0,
+                     Male = 0, Female = 0, 
+                     AgeUnder18 = 0, Age18to64 = 0, Age65andOver = 0, 
+                     White = 0, Black = 0, AIAN = 0, Asian = 0, MR = 0, Hispanic = 0, EducLow = 0, EducMid = 0, EducHigh = 0, 
+                     PovertyStatusDet = 0, IncomeBelowPoverty = 0, Unemployed = 0, Unemp_denom = 0, 
+                     MCD.denom = 0, Medicaid = 0, Unins.denom = 0, Uninsured = 0)
+
+for (i in 1:7){
+  census <- rbind(census, get_acs(geography = "zcta", survey = "acs5",
+                       variables = c("B01003_001","B17001_001","B17001_002","B01001_002","B01001_026",
+                                     "B02001_002","B02001_003","B02001_004","B02001_005","B02001_006","B02001_008",
+                                     "B03001_003", 
+                                     "B01001_003","B01001_004","B01001_005","B01001_006","B01001_007","B01001_008","B01001_009",
+                                     "B01001_010","B01001_011","B01001_013","B01001_014","B01001_015","B01001_016","B01001_017",
+                                     "B01001_018","B01001_019","B01001_020","B01001_021","B01001_022","B01001_023","B01001_024","B01001_025",
+                                     "B01001_027","B01001_028","B01001_029","B01001_030","B01001_031","B01001_032","B01001_033","B01001_034",
+                                     "B01001_035","B01001_036","B01001_037","B01001_038","B01001_039","B01001_040","B01001_041","B01001_042","B01001_043",
+                                     "B01001_044","B01001_045","B01001_046","B01001_047","B01001_048","B01001_049",
+                                     "B06009_002","B06009_003", "B06009_004","B06009_005","B06009_006",
+                                     "B23025_002","B23025_005",
+                                     "C27007_001", "C27007_004", "C27007_007", "C27007_010", "C27007_014", "C27007_017", "C27007_020",
+                                     "B18135_001","B18135_007","B18135_012","B18135_018","B18135_023","B18135_029","B18135_034"), 
+                       year = 2013 + i) %>% 
+  pivot_wider(id_cols = c(GEOID, NAME), names_from = variable, values_from = estimate) %>% 
+    mutate(YEAR = 2013 + i, TotalPop = B01003_001, PovertyStatusDet = B17001_001, IncomeBelowPoverty = B17001_002,
+           AgeUnder18 = B01001_003 + B01001_004 + B01001_005 + B01001_006 + B01001_027 + B01001_028 + B01001_029 + B01001_030,
+           Age18to64 = B01001_007 + B01001_008 + B01001_009 + B01001_010 + B01001_011 + B01001_013 + B01001_014 + B01001_015 + 
+                       B01001_016 + B01001_017 + B01001_018 + B01001_019 + B01001_031 + B01001_032 + B01001_033 + B01001_034 +
+                       B01001_035 + B01001_036 + B01001_037 + B01001_038 + B01001_039 + B01001_040 + B01001_041 + B01001_042 + B01001_043, 
+           Age65andOver = B01001_020 + B01001_021 + B01001_022 + B01001_023 + B01001_024 + B01001_025 + 
+                          B01001_044 + B01001_045 + B01001_046 + B01001_047 + B01001_048 + B01001_049, 
+           Male = B01001_002, Female = B01001_026, 
+           White = B02001_002, Black = B02001_003, AIAN = B02001_004, Asian = B02001_005 + B02001_006, MR = B02001_008, 
+           Hispanic = B03001_003, 
+           EducLow = B06009_002, EducMid = B06009_003 + B06009_004, EducHigh = B06009_005 + B06009_006,
+           Unemployed = B23025_005, Unemp_denom = B23025_002,
+           MCD.denom = C27007_001	, Medicaid = C27007_004	 + C27007_007 + C27007_010	+ C27007_014 + C27007_017 + C27007_020,
+           Unins.denom = B18135_001, Uninsured = B18135_007 + B18135_012 + B18135_018 + B18135_023 + B18135_029 + B18135_034) %>% 
+    select(ZipCode = GEOID, NAME, YEAR, TotalPop:Uninsured))
+  
+  print(i)
+}
+census <- census[-1,]
+
+##########
+census$ZipCode <- substr(census$NAME, 7, 11)
+#census$ZipCode <- str_pad(census$ZipCode, 5, pad = "0")
+
+
+census %>% 
+  filter(YEAR == 2020) %>% 
+  select(ZipCode) %>% 
+  #unique() %>% 
+  table() %>% 
+  table()
+```
+
+
+
+# Analysis
+## SEt data again
+
+```{r}
+
+uds.sites[!is.na(uds.sites$Zip),] %>% 
+  group_by(`Grant Number`, Zip, Year) %>% 
+  summarise(Counts = n()) %>% 
+  select(`Grant Number`, Zip, Year, Counts) %>% 
+  unique() %>% 
+  arrange(Year) %>% 
+  pivot_wider(id_cols = c(`Grant Number`, Zip), names_from = Year, values_from = Counts, values_fill = 0) %>% 
+  arrange(Zip)
+  
+
+```
+
+
+
+## Set Data
+```{r}
+# Identify number of clinics in each zip code-year
+clinics.in.zips <- uds.sites[!is.na(uds.sites$Zip),] %>%
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`Grant Number`), Sites = n()) %>%
+  arrange(desc(Clinics))
+
+
+# Identify clinics in competitive zip codes
+clinics.comp <- uds.sites[!is.na(uds.sites$Zip),] %>% 
+  select(`Grant Number`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  pivot_wider(id_cols = `Grant Number`, names_from = Year, values_from = Clinics) %>% 
+  filter(`2014` == 1 & `2015` == 1 & `2016` == 1 ) %>%   
+  #filter(`2014` == 1 & `2015` == 1) %>%  
+  left_join(chc.term, by = c("Grant Number" = "ClinicID")) %>%
+  filter(is.na(NewClinicID)) %>%
+  select(`Grant Number`:`2021`) %>% 
+  pivot_longer(cols = c(`2014`:`2021`)) %>% 
+  group_by(`Grant Number`) %>% 
+  filter(min(value) == 1 ) %>% 
+  #filter(max(value) == last(value)) %>% 
+  mutate(Tx = ifelse(value > 1, 1, 0))
+
+
+# Classify clinics by introduction of competition
+df.comp <- left_join(clinics.comp %>% mutate(Year = as.numeric(name)), uds.zip.totals, by = c("Grant Number", "Year" = "Reporting Year")) %>% 
+  left_join(uds.sites[!is.na(uds.sites$Zip),] %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(Sites = n()), by = c("Grant Number", "Year")) %>% 
+  ungroup() %>% 
+  group_by(`Grant Number`) %>% 
+  mutate(Att = min(ifelse(Tx == 0, 2, 1)*Year, na.rm = TRUE) ) %>% 
+  group_by(`Grant Number`) %>% 
+  mutate(Att = ifelse(Att < 2022, Att, 0)) %>% 
+  ungroup() %>% 
+  mutate(ID = as.numeric(factor(`Grant Number`)))
+
+# Identify expandors vs expandees
+df.expand <- df.comp %>% 
+  left_join(
+      left_join(df.comp %>% select(`Grant Number`, Att), uds.sites[!is.na(uds.sites$Zip),] %>% 
+        select(`Grant Number`, Zip, Year) %>% 
+        group_by(`Grant Number`, Zip) %>% 
+        summarise(YearFirstInZip = min(Year)) %>% 
+        filter(YearFirstInZip %notin% c(2014)) %>% 
+        select(`Grant Number`, YearFirstInZip) %>% 
+        unique(), by = c("Grant Number")) %>% #filter(`Grant Number` == "H80CS00101") %>% 
+        mutate(Expandor = ifelse(is.na(YearFirstInZip) | Att != YearFirstInZip, 0, 1)) %>%  #  is.na(YearFirstInZip) | Att != YearFirstInZip
+        group_by(`Grant Number`) %>% summarise(Expandor = max(Expandor)), by = c("Grant Number")) %>% 
+  left_join(uds.HIT, by = c("Grant Number", "Year")) 
+
+
+df.expand <- df.expand %>% 
+  left_join(df.expand %>% filter(SwitchEMR == 1) %>%  
+            select(`Grant Number`, Year, SwitchEMR) %>% 
+            group_by(`Grant Number`) %>% 
+            summarise(FirstSwitch = min(Year)), by = c("Grant Number")) #%>% mutate(SwitchEMR = ifelse(is.na(FirstSwitch), 0, ifelse(Year >= FirstSwitch & FirstSwitch >= 2014, 1, 0)))
+
+
+df.qual.exp <- df.expand %>% 
+  left_join(uds.6b.rates, by = c("Grant Number" = "GrantNumber", "Year")) %>% 
+  left_join(uds.6b.denom, by = c("Grant Number" = "GrantNumber", "Year")) %>% 
+  #filter(Expandor == 0 & Year %in% c(2015, 2016, 2017, 2018, 2019, 2020) & Att %in% c(0, 2017, 2018, 2019, 2020)) %>%  ## Regular go to analysis
+  filter(Expandor == 0 & Year %in% c(2015, 2016, 2017, 2018, 2019) & Att %in% c(0, 2017, 2018, 2019)) %>%  ## Really pronounced causal responses, weak first order stuff
+  #filter(Expandor == 0 & Year %in% c(2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021) & Att %in% c(0, 2017, 2018, 2019)) %>%
+  left_join(uds.sites %>% 
+    group_by(`Grant Number`, Year) %>% 
+    summarise(TotalAccess = sum(Access, na.rm = T)), by = c("Grant Number","Year")) %>%
+inner_join(uds.sites %>% filter(Year == 2015) %>% select(`Grant Number`, Zip) %>% group_by(`Grant Number`) %>% summarise(Zips = n_distinct(Zip)), by = c("Grant Number")) %>%
+  mutate(ZipFilter = ifelse(Zips > 2.75, 2, 1)) %>% 
+#inner_join(uds.sites %>% filter(Year == 2014) %>% select(`Grant Number`, Zip) %>% group_by(`Grant Number`) %>% summarise(Zips = n_distinct(Zip)) %>% filter(Zips > 2.75), by = c("Grant Number")) %>%
+#inner_join(df.expand %>% filter(Year == 2015) %>% mutate(ZipFilter = ifelse(Total > median(Total), 2, 1)) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>%
+  mutate(l.Sites = log(Sites),
+         l.Total = log(Total))
+
+k = 1  # 1 for larger group, 0 for smaller clinic group OOOOOOORRRRRRR 2 for large, 1 for medium, and 0 for small
+
+
+
+# df.qual.exp <- inner_join(uds.sites %>% select(`Grant Number`, `Site State`) %>% unique(), df.qual.exp, by = c("Grant Number")) %>%
+# mutate(ACA = ifelse((`Site State` %in% c('MI','NH') & Year >= 2014) |
+#                     (`Site State` %in% c('PA','IN','AK') & Year >= 2015) |
+#                     (`Site State` %in% c('MT','LA') & Year >= 2016) |
+#                     (`Site State` %in% c('VA','ME') & Year >= 2019) |
+#                     (`Site State` %in% c('ID','UT','NE') & Year >= 2020) |
+#                     (`Site State` %in% c('OK','MO') & Year >= 2021) |
+#                     (`Site State` %in% c('AZ','AR','CA','CO','CT','DE','DC','HI','IL','IA','KY','MD','MA','MN','NV','NJ','NM','NY','ND','OH','OR','PA','RI','VT','VA','WA') & Year >= 2014), 1, 0)) %>%
+#   select(`Grant Number`, ZipFilter, value:ACA)
+
+# %>%
+#   group_by(`Grant Number`) %>%
+#   filter(max(ACA) == 0 | min(ACA) == 1) %>%
+#   ungroup()
+
+
+
+df.qual.exp <- df.qual.exp %>% 
+  mutate(
+    None = None / Total * 100,
+         MCR = MCR / Total * 100,
+         COM = COM / Total * 100,
+         MCD = MCD / Total * 100,
+    
+         SwitchEMR = SwitchEMR * 100, 
+         eScripts = eScripts* 100, 
+         eDecisionSupport = eDecisionSupport * 100, 
+         InterOrgHITexchange = InterOrgHITexchange * 100, 
+         PatientPortals = PatientPortals * 100, 
+         UDSQualRep.highlowuse = UDSQualRep.highlowuse * 100) %>% 
+  left_join(uds.covariates, by = c("Grant Number","Year")) %>% 
+  left_join(uds.7, by = c("Grant Number","Year")) %>% 
+  mutate(Pct.HBW = BirthsGTE2500 / TotalDeliveries * 100, 
+         Pct.HTN.CNTRL = Controlcount / Sample * 100) %>% 
+  
+  left_join(cw %>% select(`Grant Number`, EIN), by = c("Grant Number")) %>% 
+  left_join(unique(rbind(chc.finances, chc.fin.2) %>% group_by(ID, year) %>% summarise_all(max)) %>% 
+  arrange(ID, year), by = c("EIN" = "ID", "Year" = "year")) %>% 
+  mutate(Liabilities = `Liabilities (as pct of assets)` * `Total net assets`, 
+         Staffing = `Total expenses before depreciation` * Personnel, 
+         LBE.pct = `Gross land, buildings and equipment (LBE)` / `Total net assets`, 
+         `Liabilities (as pct of assets)` = `Liabilities (as pct of assets)` * 100, 
+         `Surplus as a pct of before dep expenses` = `Surplus as a pct of before dep expenses` * 100, 
+         Qcomp = (IMM2yo + Pap + ChildBMI + AdultBMI + Tobac + CRC + DepScrn) / 7, 
+         CostOfCare = `Total expenses before depreciation` / Total) %>% 
+  
+  mutate(Liquidity =  `Total net assets` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         Profitability =  `Unrestricted surplus (deficit) before depreciation` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         Efficiency = (`Total revenue (unrestricted & restricted)` - `Total expenses before depreciation`) / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         NetWorth = (100 - `Liabilities (as pct of assets)`) / `Liabilities (as pct of assets)` / 100) %>% 
+  mutate(Altmans.Z = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% # 6.56, 3.26, 6.72, 1.05  OR 0.18, 0.3, 0.81, 0.14
+  mutate(Liquidity = ifelse(Liquidity == 'Inf', NA, Liquidity), 
+         Profitability = ifelse(Profitability == 'Inf', NA, Profitability), 
+         Efficiency = ifelse(Efficiency == 'Inf', NA, Efficiency), 
+         NetWorth = ifelse(NetWorth == 'Inf', NA, NetWorth), 
+         Altmans.Z = ifelse(Altmans.Z == 'Inf', NA, Altmans.Z)) #%>%   filter(!is.na(Altmans.Z) & Altmans.Z != 'Inf')
+
+
+df.qual.exp %>%
+  group_by(Att, Expandor) %>%
+  summarise(n() / 6)
+
+df.qual.exp %>% 
+  group_by(Tx) %>% 
+  summarise(mean(Altmans.Z, na.rm = TRUE), sd(Altmans.Z, na.rm = TRUE))
+
+
+##########
+## Using penetration rate to filter instead of zip codes
+##########
+#IncomeBelowPoverty
+
+years <- unique(df.qual.exp$Year)
+
+#FQHC penetration rate by zip code
+temp1 <- uds.zip %>%
+  filter(`Reporting Year` == 2015 ) %>%
+  inner_join(uds.sites[!is.na(uds.sites$Zip),] %>%
+              filter(Year %in% years), by = c("Grant Number","Zip Code" = "Zip", "Reporting Year" = "Year")) %>%
+  select(`Grant Number`, `Reporting Year`, `Zip Code`, `Total Number of Patients`) %>%
+  left_join(census, by = c("Zip Code" = "ZipCode","Reporting Year" = "YEAR")) %>% #,"Reporting Year" = "YEAR"
+  mutate(MarketShare = `Total Number of Patients` / IncomeBelowPoverty) %>%#IncomeBelowPoverty or TotalPop
+  unique()
+
+temp1 %>% 
+  filter(`Reporting Year` == 2020)
+
+census %>% filter(YEAR == 2020)
+# FQHC weighted average penetration rate conditional on site in zip
+
+temp2 <- temp1 %>%
+  mutate(Num = IncomeBelowPoverty * MarketShare) %>%
+  group_by(`Grant Number`, `Reporting Year`) %>%
+  summarise(Num = sum(Num, na.rm = TRUE)) %>%
+  left_join(temp1 %>%
+  group_by(`Grant Number`, `Reporting Year`) %>%
+  summarise(YTotal = sum(IncomeBelowPoverty, na.rm = TRUE)), by = c("Grant Number","Reporting Year")) %>% #IncomeBelowPoverty
+  mutate(MarketShare = Num / YTotal) %>%
+  select(`Grant Number`, `Reporting Year`, MarketShare)
+
+
+
+df.qual.exp <- df.qual.exp %>%
+  select(`Grant Number`, value:Altmans.Z) %>% 
+  left_join(temp2, by = c("Grant Number")) %>% #,"Year" = "Reporting Year")) %>%
+  #mutate(ZipFilter = ifelse(MarketShare > median(MarketShare, na.rm = FALSE), 2,  # - 0.25
+  #                   ifelse(is.na(MarketShare) == T, 1, 1))) %>%
+  mutate(ZipFilter = ifelse(MarketShare >= median(MarketShare, na.rm = TRUE), 2, 1)) %>% #median(MarketShare, na.rm = TRUE)
+  select(`Grant Number`, ZipFilter, MarketShare, value:Altmans.Z) %>%
+  # inner_join(df.qual.exp %>% filter(Year == 2016) %>% mutate(Filter = ifelse(`Surplus as a pct of after dep expenses` < 0, 1, 
+  #                                                                     ifelse(`Surplus as a pct of after dep expenses` > 0.03, 2, NA))) %>% select(`Grant Number`, Filter), by = c("Grant Number")) %>% 
+  # select(`Grant Number`, ZipFilter, Filter, MarketShare, value:Altmans.Z) %>% 
+  #mutate(ZipFilter = Filter) %>% 
+  unique()
+
+
+summary(df.qual.exp$MarketShare)
+summary(df.qual.exp$Zips)
+summary(df.qual.exp$`Surplus as a pct of after dep expenses`)
+
+df.qual.exp %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n(), n_distinct(ID))
+df.qual.exp %>% filter(`Grant Number` == "H80CS00225")
+
+cnames <- colnames(df.qual.exp)
+
+
+
+
+compare <- read.csv("comeptition.data.final.csv")[,-1]
+colnames(compare) <- cnames
+
+# df.qual.exp <- compare
+# df.qual.exp <- df.qual.exp %>%
+#   #select(`Grant Number`:Year) %>%
+#   inner_join(compare %>% select(`Grant Number`, Year, value), by = c("Grant Number","Year")) %>%
+#   filter(value.x == value.y) %>%
+#   select(`Grant Number`:Altmans.Z) %>%
+#   rename(value = value.x)
+
+df.qual.exp <- df.qual.exp %>% rbind(compare %>% filter(`Grant Number` %in% c("H80CS00765","H80CS00881","H80CS02323") & Year %in% unique(df.qual.exp$Year) )) %>% 
+  filter(`Grant Number` != "H80CS00225")
+
+
+uds.sites[!is.na(uds.sites$Zip),] %>% 
+  #select(`Grant Number`, Zip, Year) %>% 
+  unique() %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
+
+# df.qual.exp %>% 
+#   select(`Grant Number`, Year, value) %>% 
+#   full_join(compare %>% select(`Grant Number`, Year, value), by = c("Grant Number","Year")) %>% 
+#   filter(is.na(value.x) | is.na(value.y))
+
+#write.csv(df.qual.exp, file = "comeptition.data.final_2.csv") DO NOT UNCOMMENT THIS LINE AS IT WILL OVERWRITE MY BACKUP DATA
+
+#df.qual.exp <- read.csv("comeptition.data.final_2.csv")
+
+
+## Add in urbanicity
+all.density <- uds.sites %>% 
+  filter(Year == 2016) %>% 
+  select(`Grant Number`, Zip) %>% 
+  unique()
+
+zipsize2 <- zctas(cb = TRUE, year = 2010)
+
+density.calc <- all.density %>% 
+  left_join(census %>% filter(YEAR == 2016), by = c("Zip" = "ZipCode")) %>% 
+  left_join(zipsize2 %>% select(ZCTA5, CENSUSAREA), by = c("Zip" = "ZCTA5")) %>% 
+  group_by(`Grant Number`) %>% 
+  mutate(num = sum(TotalPop, na.rm = TRUE), denom = sum(CENSUSAREA, na.rm = TRUE)) %>% 
+  mutate(Density = num / denom) %>% 
+  mutate(Pct.Rural = ifelse(Density < 500, 1, 0), 
+         Pct.Urban = ifelse(Density > 2500, 1, 0)) %>% 
+  select(`Grant Number`, Density, Pct.Rural, Pct.Urban) %>% 
+  unique()
+
+df.qual.exp <- df.qual.exp %>% 
+  left_join(density.calc, by = c("Grant Number")) #%>% mutate(ZipFilter = ifelse(Density >= median(Density), 2, 1))
+
+
+
+
+
+df.expand %>% 
+  filter(`Grant Number` == "H80CS00101")
+
+uds.sites %>% filter(`Grant Number` == "H80CS00101") %>% 
+  group_by(Zip) %>% 
+  summarise(min(Year))
+```
+
+## What's happening with the closures?
+```{r}
+
+closures <- uds.sites[!is.na(uds.sites$Zip),] %>% 
+  select(`Grant Number`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  pivot_wider(id_cols = `Grant Number`, names_from = Year, values_from = Clinics) %>% 
+  filter(`2014` == 1 & `2015` == 1 & `2016` == 1 ) %>% 
+  left_join(chc.term, by = c("Grant Number" = "ClinicID")) %>% 
+  filter(!is.na(NewClinicID))
+
+closures <- closures %>% pivot_longer(`2014`:`2021`) %>%
+  mutate(Outcome = ifelse(!is.na(NewClinicID) & is.na(value), 1, 0))
+
+
+closures <- closures %>% 
+  left_join(closures %>% 
+    group_by(`Grant Number`) %>% 
+    filter(value > 1) %>% 
+    filter(name == min(name)) %>% 
+    select(`Grant Number`, name), by = c("Grant Number")) %>% 
+  #rename(Year = name.x) %>% 
+  mutate(Att = as.numeric(ifelse(is.na(name.y), "0", name.y)), 
+         Year = as.numeric(name.x)) %>% 
+    select(`Grant Number`, Year, Att, Outcome) %>% 
+  rbind( df.qual.exp %>% 
+  mutate(Outcome = 0) %>% 
+  select(`Grant Number`, Year, Att, Outcome)) %>% 
+  mutate(ID = as.numeric(factor(`Grant Number`)), 
+         Tx = ifelse(Year >= Att, 1, 0))
+
+summary(lm(data = closures, Outcome ~ Tx + as.factor(Year)))
+
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = closures, 
+                      control_group = "nevertreated",
+                      panel = FALSE, 
+                      clustervars = "ID",
+                      base_period = "universal"
+                      )
+aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+```
+
+
+
+
+
+
+## Play environment
+```{r}
+
+
+cs.output.expand <- att_gt( yname = "Qcomp",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~Pct.NHB.y + Pct.HL.y + Pct.LessThan100pctFPL.y + Pct.FarmWorker.y + Pct.Homeless.y + Pct.Children.y,
+                      data = df.qual.exp %>% 
+  left_join(cw %>% left_join(staffing, by = c("EIN")) %>% 
+  select(`Grant Number`, Year, Staff) %>% mutate(Year = as.numeric(Year), Staff = as.numeric(Staff)), by = c("Grant Number","Year")) %>% 
+    left_join(df.qual.exp %>% filter(Year == 2016) %>% select(`Grant Number`, Pct.NHA:Pct.Children), by = c("Grant Number")) %>% 
+    filter(ZipFilter == 1), # / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`) * 1000), # %>% inner_join(df.qual.exp %>% filter(Year == 2016 & `Surplus as a pct of before dep expenses`< 2) %>% select(`Grant Number`), by = c("Grant Number")),  # %>% select(Year, ID, Att, `Gross land, buildings and equipment (LBE)`) %>% filter(!is.na(`Gross land, buildings and equipment (LBE)`)), ### Split surplus pct after dep at 0 and 0.05 in 2016 plus ZipFilter ==2
+                      control_group = "nevertreated",
+                      panel = TRUE, 
+                      clustervars = "ID",
+                      base_period = "universal"
+                      )
+aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+
+
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+data.frame(Year = cs.output.expand.agg.dyn$egt, 
+           Estimate = cs.output.expand.agg.dyn$att.egt, 
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt) %>% 
+  # mutate(CILB = replace(CILB, Year == -1, NA), 
+  #        CIUB = replace(CIUB, Year == -1, NA)) %>% 
+  #filter(abs(Year) < 4) %>% 
+  ggplot(mapping = aes(x = Year, y = Estimate)) + 
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") + 
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") + 
+  geom_point() + geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) + theme_tufte_revised()
+
+
+
+summary(df.qual.exp[df.qual.exp$Year %in% c(2016:2019),]$`Liabilities (as pct of assets)`)
+
+# Surplus as a pct of after dep expenses
+# Liabilities (as pct of assets)
+# Qcomp
+# Gross land, buildings and equipment (LBE)
+
+df.qual.exp %>%
+  #filter(Att == 2020 & Year == 2020) %>%
+  select(Att, Year, `Gross land, buildings and equipment (LBE)`, Sites, Altmans.Z, None) %>%
+  mutate(Treat = ifelse(Att > 0, 1, 0)) %>%
+  group_by(Att, Year) %>%
+  summarize(Outcome = mean(None, na.rm = TRUE)) %>%
+ # mutate(Outcome = ifelse(Outcome < -5, -5, Outcome)) %>%
+  ggplot(aes(x = Year, y = Outcome, group = factor(Att), color = factor(Att))) + geom_point() #+ geom_jitter()
+
+
+
+# uds.zip.totals %>% 
+#   mutate(LowInc = (None + MCD) / Total) %>% 
+#   filter(LowInc < 0.5 & `Reporting Year` == 2019)
+#summary(lm(data = df.qual.exp, Qcomp ~ MarketShare + factor(Year) + factor(`Grant Number`)))
+
+
+#df.qual.exp %>% filter(Year == 2016 & `Surplus as a pct of after dep expenses` < 0 & ZipFilter == 2)
+
+
+```
+
+
+
+
+## Quick Matching to see if shit changes
+```{r}
+
+# df.match <- df.qual.exp %>% filter(Year == 2015) %>%
+#   select(`Grant Number`, Att, MCD, Total, Sites, Pct.NHB, Pct.HL, Pct.Children, Pct.LessThan100pctFPL)
+# 
+# 
+# FIPS <- df.match$`Grant Number`
+# X <- as.matrix(df.match[,c(3:9)])
+# Tr <- ifelse(df.match$Att > 0, 1, 0)
+# 
+# summary(X)
+# 
+# m <- Match(Tr = Tr, X = X, M = 1) #, replace = TRUE)
+# #mb <- MatchBalance(Treatment ~ . - FIPS, data=df.match, match.out=m, nboots=500)
+# 
+# df.matched <- data.frame(FIPS[m$index.treated], FIPS[m$index.control]) %>%
+#   mutate(Paired = paste(FIPS[m$index.treated], FIPS[m$index.control], sep = "-"))
+# 
+# df.matched <- rbind(df.matched %>%
+#         select(FIPS.m.index.treated., Paired) %>%
+#         rename(FIPS = FIPS.m.index.treated.) %>%
+#         mutate(Treatment = 1),
+#       df.matched %>%
+#         select(FIPS.m.index.control., Paired) %>%
+#         rename(FIPS = FIPS.m.index.control.) %>%
+#         mutate(Treatment = 0)) %>%
+#   rename(`Grant Number` = FIPS)
+# 
+# df.qual.exp <- inner_join(df.matched %>% select(`Grant Number`, Treatment), df.qual.exp, by = c("Grant Number")) # %>% unique()
+
+```
+
+
+
+
+
+# Figures
+
+## Prep for the robustness tests
+```{r}
+atts <- c("Primo", rep(0, 6))
+
+# cbind("Sites", round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+#       cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+#       cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+#       cs.output.expand.agg.dyn$overall.att, 
+#       cs.output.expand.agg.dyn$overall.att - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se, 
+#       cs.output.expand.agg.dyn$overall.att + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se), 3))
+z <- c("Primo", 0) #cs.output.expand$Wpval
+
+```
+
+
+
+## Figure 0 - Demographics
+```{r}
+df.qual.exp %>% 
+  mutate(Treat = ifelse(Att > 0, 1, 0)) %>% 
+  mutate(Groups = ifelse(Treat == 1 & Expandor == 0, "Treated", 
+                  ifelse(Treat == 0 & Expandor == 0, "Control", 
+                  ifelse(Treat == 0 & Expandor == 1, "Expandor Comp", "Expandor No Comp")))) %>% 
+  filter(Year == 2015) %>%  #z & ZipFilter == 2) %>% 
+  select(Sites, Zips, #MarketShare, 
+         Total, None:MCD, IMM2yo:DepScrn, Groups, Pct.NHA:Pct.NHW, Pct.LessThan200pctFPL, Pct.Homeless:Pct.Children, `Liabilities (as pct of assets)`, `Gross land, buildings and equipment (LBE)`, `Surplus as a pct of after dep expenses`) %>% #SwitchEMR, InterOrgHITexchange, UDSQualRep.highlowuse, 
+  tbl_summary(by = Groups, 
+              statistic = all_continuous() ~ "{mean} ({sd})") %>% 
+  add_p(test = everything() ~ "t.test") 
+
+
+df.qual.exp %>% mutate(Treat = ifelse(Att > 0, 1, 0)) %>% group_by(Treat) %>% summarise(n())
+
+
+df.qual.exp %>% 
+  filter(Year %in% c(2015, 2016)) %>% 
+  mutate(Groups = ifelse(is.na(Personnel), "NoFins", "Fins")) %>% 
+ #z & ZipFilter == 2) %>% 
+  select(Sites, Zips, #MarketShare, 
+         Total, None:MCD, #IMM2yo:DepScrn, 
+         Groups, Pct.NHA:Pct.NHW, Pct.LessThan200pctFPL, Pct.Homeless:Pct.Children) %>% #SwitchEMR, InterOrgHITexchange, UDSQualRep.highlowuse, 
+  tbl_summary(by = Groups, 
+              statistic = all_continuous() ~ "{mean} ({sd})", digits = all_continuous() ~ 2) %>% 
+  add_p(test = everything() ~ "t.test")
+
+df.qual.exp %>% 
+  mutate(Groups = ifelse(is.na(Personnel), "NoFins", "Fins")) %>% 
+  group_by(Groups) %>% 
+  summarise(n())
+
+R.version
+
+442*5
+37*5
+518/1877
+
+442+37
+
+```
+
+
+
+
+
+
+
+## Figure 1 - Trends over time
+
+```{r}
+## Plot
+p <- uds.sites[!is.na(uds.sites$Zip),] %>% 
+  select(`Grant Number`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  group_by(Year, Clinics) %>% 
+  summarise(Count = n()) %>% 
+  mutate(CompetitorsInArea = factor(ifelse( Clinics < 4, Clinics - 1, "3+"))) %>% 
+  group_by(Year, CompetitorsInArea) %>% 
+  summarise(Count = sum(Count))
+
+plot <- p %>% 
+  ggplot(aes(x = Year, y = Count, group = CompetitorsInArea, color = CompetitorsInArea)) + 
+  geom_point() + geom_line() + theme_minimal() + 
+  ggtitle("Figure 1 - Counts of FQHCs by number of competing FQHCs in service area, 2014-2021") + ylab("Number of FQHCs") 
+plot + scale_color_discrete(name = "Competitors")
+
+## Table
+uds.sites[!is.na(uds.sites$Zip),] %>% 
+  select(`Grant Number`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  group_by(Year, Clinics) %>% 
+  summarise(Count = n()) %>% 
+  mutate(CompetitorsInArea = factor(ifelse( Clinics < 4, Clinics - 1, "3+"))) %>% 
+  group_by(Year, CompetitorsInArea) %>% 
+  summarise(Count = sum(Count)) %>% 
+  pivot_wider(id_cols = CompetitorsInArea, names_from = Year, values_from = Count) 
+
+
+plot0 <- p %>% 
+  arrange(CompetitorsInArea) %>% 
+  ggplot(aes(x = Year, y = Count, group = CompetitorsInArea, color = CompetitorsInArea)) + ylab("FQHCs") + 
+  geom_point() + geom_line() + theme_tufte_revised() + ggtitle("FQHCs by Number of Rival Clinics") + 
+  geom_dl(label=c(rep("0 Competitors", 8), rep("1 Competitor", 8), rep("2 Competitors", 8), rep("3+ Competitors", 8)), 
+          method = list("last.points", hjust = 1, vjust = 3, cex = 0.75), inherit.aes=T ) + 
+  guides(colour = "none")
+
+plot1 <- uds.sites[!is.na(uds.sites$Zip),] %>% 
+            group_by(Zip, Year) %>% 
+  summarise(Counts = n()) %>% 
+  #summarise(Counts = n_distinct(`Grant Number`)) %>% 
+  ungroup() %>% 
+  group_by(Year, Counts) %>% 
+  summarise(Zips = n()) %>% 
+  mutate(Counts.f = as.factor(ifelse(Counts >= 2, "2+", Counts))) %>% 
+  group_by(Counts.f, Year) %>% 
+  summarise(Zips = sum(Zips)) %>% 
+  ggplot(aes(x = Year, y = Zips, group = Counts.f, color = Counts.f)) + 
+  geom_point() + geom_line() + theme_tufte_revised() + ggtitle("Zip Codes by Number of FQHC Sites") + 
+  geom_dl(label=c(rep("1 Site", 8), rep("2+ Sites", 8)), method = list("last.points", hjust = 1, vjust = -0.5, cex = 0.75), inherit.aes=T ) + 
+  guides(colour = "none")
+
+
+p.desc <- ggarrange(plot1, plot0) 
+
+annotate_figure(p.desc, top = text_grob("Figure 2 - FQHC Growth and Density by Zip and Clinic", face = "bold", size = 14))
+
+
+# rbind(uds.sites %>% 
+#   group_by(`Grant Number`, `Site Name`) %>% 
+#   summarise(Year = min(Year)) %>% 
+#   group_by(Year) %>% 
+#   summarise(Counts = n()) %>% 
+#   mutate(Type = "Opened"), 
+#   uds.sites %>% 
+#   group_by(`Grant Number`, `Site Name`) %>% 
+#   summarise(Year = max(Year)) %>% 
+#   group_by(Year) %>% 
+#   summarise(Counts = n()) %>% 
+#   mutate(Type = "Closed")) %>% 
+#   filter(Year %in% c(2015:2019))
+
+```
+
+
+```{r}
+
+# df.z %>% 
+#   group_by(as.factor(Att), Year) %>% 
+#   summarise(outcome = mean(Total.z, na.rm = TRUE)) %>% 
+#   ggplot(aes(x = Year, y = outcome, color = `as.factor(Att)`)) + geom_point()
+
+# 
+# cs.output.expand <- att_gt( yname = "Total.z",
+#                       tname = "Year",
+#                       idname = "ID",
+#                       gname = "Att",
+#                       xformla = ~1,
+#                       data = df.z, # %>%  group_by(`Grant Number`, Year, Att) %>% summarise(Zips = n(), ID = min(ID), Total.z = sum(Total.z, na.rm = TRUE) ), # %>% filter(Year > 2015),
+#                       control_group = "nevertreated",
+#                       clustervars = "ID",
+#                       panel = FALSE,
+#                       base_period = "universal"
+#                       )
+# aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+# 
+# 
+# cs.output.expand <- att_gt( yname = "Total.z",
+#                       tname = "Year",
+#                       idname = "ID",
+#                       gname = "Att.z",
+#                       xformla = ~1,
+#                       data = df.z %>% group_by(`Grant Number`, Year, Att, Att.z) %>% summarise(Zips = n(), ID = min(ID), Total.z = sum(Total.z, na.rm = TRUE) ) %>% filter(Att == Att.z), # %>% filter(Year > 2015),
+#                       control_group = "nevertreated",
+#                       clustervars = "ID",
+#                       panel = FALSE,
+#                       base_period = "universal"
+#                       )
+# aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+# 
+# #uds.zip %>% filter(`Grant Number` == "H80CS00030" & `Zip Code` == '48264')
+
+
+
+```
+
+
+
+
+
+
+## Figure 2 - Focused analysis, patient attribution in service area (where they have sites)
+```{r}
+
+## Treatment vs control, only in zip code of interest
+df.z <- left_join(df.qual.exp #%>% filter(`Grant Number` != "H80CS00225")
+                  , #uds.zip %>% mutate(Zip = `Zip Code`) %>% select(`Grant Number`, Zip) %>% unique() , by = c("Grant Number")) %>%
+                  uds.sites[!is.na(uds.sites$Zip),] %>%
+                    filter(Year %in% c(2015:2019)) %>% 
+              select(`Grant Number`, Zip) %>%
+              unique() , by = c("Grant Number")) %>%
+  left_join(uds.zip %>%
+            mutate(  Total.z = `Total Number of Patients`, 
+                     MCD.z = `Medicaid_CHIP_Other Public Patients`,
+                     MCR.z = `Medicare Patients`,
+                     COM.z = `Private Patients`, 
+                     None.z = `None_Uninsured Patients`) %>%
+            select(`Grant Number`, `Reporting Year`, `Zip Code`, Total.z:None.z), by = c("Grant Number", "Year" = "Reporting Year", "Zip" = "Zip Code")) %>%
+  left_join(clinics.in.zips %>% select(Zip:Clinics), by = c("Zip","Year")) %>%
+  mutate(Tx.z = ifelse(Clinics == 1 , 0, 
+                ifelse(is.na(Clinics), NA, 1)), # | is.na(Clinics)
+         ID = as.numeric(factor(paste(`Grant Number`, Zip, sep = "-")))) %>%
+  select(`Grant Number`:Year, ZipFilter, Att, ID, Zip:Tx.z) %>%
+  arrange(`Grant Number`, Zip, Year) %>% 
+  unique() #%>%  inner_join(df.qual.exp %>% filter(Year == 2015 & Total > 12050) %>% select(`Grant Number`), by = c("Grant Number"))  #& Zips < 3.75 or 4.75
+  # %>%   filter(MarketShare > median(MarketShare, na.rm = TRUE) - 0.25) 
+
+df.z <- df.z %>%
+  left_join(df.z %>%
+            filter(Tx.z == 1) %>%
+            group_by(ID, Zip) %>%
+            summarise(Att.z = min(Year)), by = c("ID", "Zip")) %>%
+  mutate(Att.z = ifelse(is.na(Att.z), 0, Att.z)) #%>%
+# inner_join(df.z %>% filter(!is.na(Clinics)) %>% group_by(ID) %>% summarise(n()) %>% filter(`n()` == length(unique(df.qual.exp$Year))), by = c("ID")) #%>% filter(Att == Att.z)
+
+
+### NOTE: The aabove commented lines are very important, they decide if only the service area or whole catchment is included in analysis.  
+# cs.output.expand <- att_gt( yname = "Outcome",
+#                       tname = "Year",
+#                       idname = "ID",
+#                       gname = "Att",
+#                       xformla = ~1,
+#                       data = df.z %>% group_by(`Grant Number`, Year, Att) %>% summarise(ID = min(ID), Outcome = sum(MCD.z, na.rm = TRUE) ), # %>% filter(Year > 2015),
+#                       control_group = "nevertreated",
+#                       clustervars = "ID",
+#                       panel = TRUE,
+#                       base_period = "universal"
+#                       )
+# aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+
+
+
+## Whole zip as one measure
+
+df.z.full <- df.z %>% ############## NOTE: Original +500 effect was recoved with Att.z, not Att
+  select(Zip, ZipFilter, Att.z, Year) %>% 
+  unique() %>% 
+  left_join(uds.zip, by = c("Zip" = "Zip Code", "Year" = "Reporting Year")) %>% 
+  left_join(uds.6b.rates %>% 
+            mutate(Quality = (IMM2yo + Pap + ChildBMI + AdultBMI + Tobac + CRC + DepScrn) / 7) %>% 
+            select(GrantNumber, Year, Quality), by = c("Grant Number" = "GrantNumber", "Year")) %>% 
+  group_by(Zip, ZipFilter, Year, Att.z) %>% 
+  summarise(
+    Total.z = sum(`Total Number of Patients`, na.rm = TRUE), 
+    MCD.z = sum(`Medicaid_CHIP_Other Public Patients`, na.rm = TRUE),
+    MCR.z = sum(`Medicare Patients`, na.rm = TRUE),
+    COM.z = sum(`Private Patients`, na.rm = TRUE),
+    None.z = sum(`None_Uninsured Patients`, na.rm = TRUE), 
+    Quality.z = sum(`Total Number of Patients` * Quality, na.rm = TRUE) / Total.z) %>% 
+  ungroup() %>% 
+  mutate(ID = as.numeric(as.factor(Zip)))# %>% group_by(`Grant Number`, Year, Att) %>% summarise(ID = min(ID), Total.z = sum(Total.z, na.rm = TRUE)) # %>% filter(Year > 2015),
+
+
+df.zip.1 <- df.z %>% select(ID, ZipFilter, Year, Att, Total.z:None.z)
+df.zip.2 <- df.z.full %>% select(ID, ZipFilter, Year, Att.z, Total.z:Quality.z)
+
+
+## Start the loop
+
+for (k in 1:3){
+  
+atts.zip.1 <- rep(0, 6)
+atts.zip.2 <- rep(0, 6)
+  
+if (k == 1){temp.1.root <- df.zip.1
+            temp.2.root <- df.zip.2} else 
+  if (k == 2){temp.1.root <- df.zip.1 %>% filter(ZipFilter == 2)
+              temp.2.root <- df.zip.2 %>% filter(ZipFilter == 2)} else
+    if (k == 3){temp.1.root <- df.zip.1 %>% filter(ZipFilter == 1)
+                temp.2.root <- df.zip.2 %>% filter(ZipFilter == 1)} 
+
+for (i in 5:9){
+
+  temp.1 <- temp.1.root[,c(1:4, i)]
+  colnames(temp.1) <- c("ID", "ZipFilter", "Year","Att","Outcome")
+
+   temp.2 <- temp.2.root[,c(1:4, i)]
+  colnames(temp.2) <- c("ID", "ZipFilter", "Year","Att","Outcome")
+  
+
+  
+    # Incumbent only
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = temp.1,
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = FALSE,
+                      base_period = "universal"
+                      )
+
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+data.frame(Year = cs.output.expand.agg.dyn$egt,
+           Estimate = cs.output.expand.agg.dyn$att.egt,
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt) %>%
+  ggplot(mapping = aes(x = Year, y = Estimate)) +
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") +
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") +
+  geom_point() +
+  geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) +
+  ggtitle("Total Zip") +
+  theme_tufte_revised()
+
+atts.zip.1 <- rbind(atts.zip.1, 
+                    cbind(colnames(df.zip.1)[i], 
+                          round(mean(temp.1[temp.1$Att == 0 & temp.1$Year == min(temp.1$Year),]$Outcome, na.rm = TRUE), 3), 
+                          round(mean(temp.1[temp.1$Att > 0 & temp.1$Year == min(temp.1$Year),]$Outcome, na.rm = TRUE) - mean(temp.1[temp.1$Att == 0 & temp.1$Year == min(temp.1$Year),]$Outcome, na.rm = TRUE), 3), 
+                          round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+                          cs.output.expand.agg.dyn.0$overall.att - (1.96 * cs.output.expand.agg.dyn.0$overall.se), 
+                          cs.output.expand.agg.dyn.0$overall.att + (1.96 * cs.output.expand.agg.dyn.0$overall.se)), 3)))
+
+
+# Incumbent + Competitor
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = temp.2, 
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = FALSE,
+                      base_period = "universal"
+                      )
+
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+data.frame(Year = cs.output.expand.agg.dyn$egt,
+           Estimate = cs.output.expand.agg.dyn$att.egt,
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt) %>%
+  ggplot(mapping = aes(x = Year, y = Estimate)) +
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") +
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") +
+  geom_point() +
+  geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) +
+  ggtitle("Total Zip") +
+  theme_tufte_revised()
+
+atts.zip.2 <- rbind(atts.zip.2, cbind(colnames(df.zip.2)[i], 
+                                      round(mean(temp.2[temp.2$Att == 0 & temp.2$Year == min(temp.2$Year),]$Outcome, na.rm = TRUE), 3), 
+                                      round(mean(temp.2[temp.2$Att > 0 & temp.2$Year == min(temp.2$Year),]$Outcome, na.rm = TRUE) - mean(temp.2[temp.2$Att == 0 & temp.2$Year == min(temp.2$Year),]$Outcome, na.rm = TRUE), 3), 
+                                      round(cbind(cs.output.expand.agg.dyn.0$overall.att,
+      cs.output.expand.agg.dyn.0$overall.att - (1.96 * cs.output.expand.agg.dyn.0$overall.se),
+      cs.output.expand.agg.dyn.0$overall.att + (1.96 * cs.output.expand.agg.dyn.0$overall.se)), 3)))
+
+}
+
+## For the full sample only
+
+
+## For Larger vs Smaller FQHCs only
+if (k == 1){atts.zip.full <-  cbind(atts.zip.1[-1,], atts.zip.2[-1,]) } else 
+  if (k == 2){atts.zip.larger <- cbind(atts.zip.1[-1,], atts.zip.2[-1,])} else
+    if (k == 3){atts.zip.smaller <- cbind(atts.zip.1[-1,], atts.zip.2[-1,])}
+
+}
+
+
+df.zip.1 %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n(), n_distinct(ID))
+df.zip.2 %>% mutate(Treat = ifelse(Att.z > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n(), n_distinct(ID))
+
+
+table.names <- rbind(cbind((df.zip.1 %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[2,2], 
+            (df.zip.1 %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[1,2]), 
+      cbind((df.zip.2 %>% mutate(Treat = ifelse(Att.z > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[2,2], 
+            (df.zip.2 %>% mutate(Treat = ifelse(Att.z > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[1,2]))
+
+
+## Figure 2 - Full Figure
+rbind(atts.zip.full, atts.zip.larger, atts.zip.smaller) %>% 
+   kable("html", booktabs = T, col.names = c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB", "Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB")) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Full Sample" = 5, "More Market Share Only" = 5, "Less Market Share Only" = 5)) %>% 
+  add_header_above(c(" " = 1, "Incumbent vs Controls (FQHC-Zip units)" = 6, "Incumbent & Competitor vs Controls (zip units)" = 6)) %>% 
+  add_footnote(c("C_0 and T_0 are mean values for each sample in control and treatment groups in first year of panel",
+                 paste("Full Sample Incumbent vs Control has ", table.names[1,1], "treatment and ", table.names[1,2], " control FQHC-Zip-Years"), 
+                 paste("Full Sample Incumbent & Control vs Control has ", table.names[2,1], "treatment and ", table.names[2,2], " control Zip-Years")))
+
+
+cbind(rep(c("Total","Medicaid","Medicare","Commerical","Uninsured"), 3), rbind(atts.zip.full, atts.zip.larger, atts.zip.smaller)[,2:6]) %>% 
+   kable("html", booktabs = T, col.names = c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB")) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  row_spec(c(1, 2, 6, 7, 10, 11, 12),bold=T, italic = T, hline_after = T) %>% 
+  pack_rows(index = c("Panel A: Full Sample" = 5, "Panel B: Higher Low-Income Market Share Subgroup" = 5, "Panel B: Lower Low-Income Market Share Subgroup" = 5)) %>% 
+  add_footnote(c("C_0 and T_0 are mean values for each sample in control and treatment groups in first year of panel",
+                 paste("Full Sample Incumbent vs Control has ", table.names[1,1], "treatment and ", table.names[1,2], " control FQHC-Zip-Years"), 
+                 paste("Full Sample Incumbent & Control vs Control has ", table.names[2,1], "treatment and ", table.names[2,2], " control Zip-Years")))
+
+```
+
+
+
+## Nicer Table 
+
+```{r}
+df.zip.1 %>% 
+  filter(Year %in% c(2016, 2019)) %>% 
+  mutate(Tx = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Year, Tx) %>% 
+  summarise(mean(Total.z, na.rm = TRUE), 
+            mean(MCD.z, na.rm = TRUE), 
+            mean(MCR.z, na.rm = TRUE), 
+            mean(COM.z, na.rm = TRUE), 
+            mean(None.z, na.rm = TRUE)) %>% 
+  arrange(Tx, Year) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(unadj = (V4 - V3) - (V2 - V1) )
+
+cbind(c("Total","Medicaid","Medicare","Commerical","Uninsured"), atts.zip.full[,2:6]) %>% 
+   kable("html", booktabs = T, col.names = c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB")) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  row_spec(c(1, 2),bold=T, italic = T, hline_after = T) %>% 
+  #pack_rows(index = c("Panel A: Full Sample" = 5, "Panel B: Higher Low-Income Market Share Subgroup" = 5, "Panel B: Lower Low-Income Market Share Subgroup" = 5)) %>% 
+  add_footnote(c("C_0 and T_0 are mean values for each sample in control and treatment groups in first year of panel",
+                 paste("Full Sample Incumbent vs Control has ", table.names[1,1], "treatment and ", table.names[1,2], " control FQHC-Zip-Years"), 
+                 paste("Full Sample Incumbent & Control vs Control has ", table.names[2,1], "treatment and ", table.names[2,2], " control Zip-Years")))
+```
+
+
+## Look at the Market as a whole
+
+
+```{r}
+
+
+df.market <- df.z.full %>% #filter(ZipFilter == 1)
+                        left_join(df.z %>% select(`Grant Number`,Zip) %>% unique(), by = c("Zip")) %>% 
+  mutate(V1 = 1, V2 = ifelse(ZipFilter == 2, 1, 0), V3 = ifelse(ZipFilter == 1, 1, 0)) %>% 
+                       select(Year, ID, Att.z, Quality.z, `Grant Number`, Total.z:None.z, V1:V3) %>%
+  # inner_join(df.qual.exp %>% filter(Year == 2015) %>%
+  #                                           mutate(ZipFilter = ifelse(Total < 12000, 1,
+  #                                                              ifelse(Total > 12000, 2, NA))) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>%
+  inner_join(df.qual.exp %>% filter(Year == 2016) %>% mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>% 
+  select(Year, ZipFilter, ID, Att.z, Quality.z, Total.z:None.z, V1:V3) %>% 
+  mutate(V4 = ifelse(ZipFilter == 2, 1, 0), V5 = ifelse(ZipFilter == 1, 1, 0)) %>% 
+  unique() 
+
+
+### Incumbnet + Competitors, Quality 
+cs.output.expand <- att_gt( yname = "Quality.z",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att.z",
+                      xformla = ~1,
+                      data = df.market %>% filter(V5 == 1), 
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = TRUE,
+                      base_period = "universal"
+                      )
+
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+data.frame(Year = cs.output.expand.agg.dyn$egt,
+           Estimate = cs.output.expand.agg.dyn$att.egt,
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt) %>%
+  ggplot(mapping = aes(x = Year, y = Estimate)) +
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") +
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") +
+  geom_point() +
+  geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) +
+  ggtitle("Total Change in Market Quality") +
+  theme_tufte_revised()
+
+
+
+```
+
+
+
+## Figure 2 plots that are nicer
+```{r}
+
+
+
+
+
+
+
+## Plot of this shit, all payors
+f2.picture.full <- rbind(rbind(atts.zip.full, atts.zip.larger, atts.zip.smaller)[,c(1:6)]) %>%  #, rbind(atts.zip.full, atts.zip.larger, atts.zip.smaller)[,c(7:12)]) %>% 
+  as.data.frame() %>% 
+  mutate(Model = c(rep("Incumbent Only", 3*5)), #, rep("Incumbent & Competitor", 3*5)), 
+         Sample = rep(c(rep("Full Sample", 5), rep("More Market Share", 5), rep("Less Market Share", 5)), 1))
+
+#### Clean up the data
+row.names(f2.picture.full) <- NULL
+colnames(f2.picture.full) <- c("Payor", "C_0", "T_0 - C_0", "Estimate", "LB", "UB", "Model","Sample")
+f2.picture.full[,4:6] <- sapply(f2.picture.full[,4:6], as.numeric)
+f2.picture.full$Sample <- factor(f2.picture.full$Sample, levels = c("Full Sample", "More Market Share","Less Market Share"))
+f2.picture.full$Payor <- gsub(f2.picture.full$Payor, pattern = ".z", replacement = "")
+f2.picture.full$Payor <- factor(f2.picture.full$Payor, levels = c("None", "MCR","COM","MCD","Total"))
+f2.picture.full$Model <- factor(f2.picture.full$Model, levels = c("Incumbent Only","Incumbent & Competitor"))
+f2.picture.full$Total <- ifelse(f2.picture.full$Payor == "Total", "Total", "Payor")
+f2.picture.full$Total <- factor(f2.picture.full$Total, levels = c("Total","Payor"))
+
+### Plot
+f2.p.totals.inc <- ggplot(data=f2.picture.full #%>% filter(Sample == "Full Sample")
+                          , aes(y=Payor, x=Estimate, xmin=LB, xmax=UB)) +
+geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates - Patients") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(Total~Sample, scales= "free_y", switch = 'y', space = "free_y")+
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) +
+  ggtitle("Figure 3, CS-DID Estimates on Patient Panel and Payor (FQHC-zip-year units)")
+
+f2.p.totals.inc #+ theme(panel.spacing = unit(1, "lines"),  title =  element_text(face = "bold", size = 12))
+
+
+
+```
+
+
+
+
+## Figure 3 - Primary Results
+
+
+
+
+```{r}
+
+df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>% 
+  
+  ungroup() %>% 
+  #filter(MarketShare < median(MarketShare, na.rm = TRUE) - 0.25) %>% 
+  #inner_join(df.qual.exp %>% filter(Year == 2015 & Total < 12000) %>% select(`Grant Number`), by = c("Grant Number")) %>%  #& Zips < 3.75 or 4.75
+  # select(`Grant Number`, Year, ID, Att, Sites, Qcomp, Altmans.Z) %>%
+  # inner_join(df.qual.exp %>% filter(Year == 2015) %>% mutate(ZipFilter = ifelse(Zips < 1.75, 1, 
+  #                                                                        ifelse(Zips > 4.75, 2, NA))) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>%
+  select(Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z)
+ 
+
+
+for (k in 1:3){
+  
+atts.sum <- rep(0, 7)
+fig3.sum <- rep(0, 5)
+
+if (k ==1){df.sum.root <- df.sum} else
+  if (k == 2){df.sum.root <- df.sum %>% filter(ZipFilter == 2)} else
+    if (k == 3){df.sum.root <- df.sum %>% filter(ZipFilter == 1)} 
+
+  
+
+for (i in 5:ncol(df.sum)){
+  
+  temp <- df.sum.root[,c(1:4, i)]
+  colnames(temp) <- c("Year", "ZipFilter", "ID","Att", "Outcome")
+  temp$Outcome
+  
+  # temp <- temp %>%
+  #   mutate(Outcome = ifelse(Outcome < quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1],
+  #                    ifelse(Outcome > quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], Outcome)))
+
+  
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = temp, # %>% filter(Year >= 2015 & Year <= 2020), 
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = FALSE, 
+                      base_period = "universal"
+                      )
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+atts.sum <- rbind(atts.sum, cbind(colnames(df.sum)[i], round(mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(mean(temp[temp$Att > 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE) - mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se), 3)))
+
+atts <- rbind(atts, cbind(colnames(df.sum)[i], round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn$overall.att, 
+      cs.output.expand.agg.dyn$overall.att - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se, 
+      cs.output.expand.agg.dyn$overall.att + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se), 3)))
+z <- rbind(z, c(colnames(df.sum)[i], cs.output.expand$Wpval))
+
+fig3.sum <- rbind(fig3.sum, 
+                 data.frame(Outcome = colnames(df.sum)[i], 
+                      Year = cs.output.expand.agg.dyn$egt, 
+           Estimate = cs.output.expand.agg.dyn$att.egt, 
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt))
+}
+
+
+
+rownames(fig3.sum) <- NULL
+if (k == 1){atts.sum.full <- atts.sum[-1,]} else 
+ if (k == 2){atts.sum.larger <- atts.sum[-1,]} else 
+   {atts.sum.smaller <- atts.sum[-1,]}
+
+}
+
+#Event Study Plots
+fig3.sum[-1,] %>%
+  ggplot(mapping = aes(x = Year, y = Estimate)) +
+  facet_wrap(~Outcome, scales = "free_y") +
+  ylab("Percentage Points") +
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") +
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") +
+  geom_point() + geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) +
+  ggtitle("fig3 - Event Study") +
+  theme_tufte_revised()
+
+
+
+table.names <- rbind(cbind((df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[2,2], 
+            (df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[1,2]), 
+      cbind((df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[4,3], 
+            (df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[3,3]), 
+      cbind((df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[2,3], 
+            (df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[1,3]))
+ 
+## Table
+rbind(atts.sum.full, atts.sum.larger, atts.sum.smaller) %>% 
+   kable("html", booktabs = T, col.names = c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB"), caption = "Fig 3 - FQHC Responses by Market Share") %>%
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Full" = 3, "Above Median Market Share FQHCs" = 3, "Below Median Market Share FQHCs" = 3)) %>% 
+  add_footnote(c("Atlman's Z is a measure of Financial Distress",
+                 "C_0 and T_0 are mean values for each sample in control and treatment groups in first year of panel",
+                 paste("Full Sample has ", table.names[1,1], "treatment and ", table.names[1,2], " control FQHC-Years")))
+
+## Better Figure
+f3.picture.full <- rbind(cbind("Full Sample", atts.sum.full), cbind("More Market Share", atts.sum.larger), cbind("Less Market Share", atts.sum.smaller) ) %>% 
+  as.data.frame()
+
+### Clean up the data
+row.names(f3.picture.full) <- NULL
+colnames(f3.picture.full) <- c("MarketShare", "Measure", "C_0", "T_0 - C_0", "Estimate", "LB", "UB")
+f3.picture.full[,3:7] <- sapply(f3.picture.full[,3:7], as.numeric)
+f3.picture.full$MarketShare <- factor(f3.picture.full$MarketShare, levels = c("Full Sample", "More Market Share","Less Market Share"))
+# f3.picture.full$Payor <- gsub(f3.picture.full$Payor, pattern = ".z", replacement = "")
+# f3.picture.full$Payor <- factor(f3.picture.full$Payor, levels = c("None", "MCR","COM","MCD","Total"))
+# f3.picture.full$Model <- factor(f3.picture.full$Model, levels = c("Incumbent Only","Incumbent & Competitor"))
+# f3.picture.full$Total <- ifelse(f3.picture.full$Payor == "Total", "Total", "Payor")
+# f3.picture.full$Total <- factor(f3.picture.full$Total, levels = c("Total","Payor"))
+
+
+### Plot
+f3.p.totals.full <- ggplot(data=f3.picture.full, aes(y=Measure, x=Estimate, xmin=LB, xmax=UB)) +
+geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~MarketShare, scales= "free", switch = 'y', space = "free_y")+
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) +
+  ggtitle("Figure 3, FQHC Performance Reactions by Market Share")
+
+f3.p.totals.full
+
+```
+
+
+
+## Figure 4 - Split by profitability
+```{r}
+
+df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>% 
+  ungroup() %>% 
+  #rename(`Grant Number` = Grant.Number, `Surplus as a pct of before dep expenses` = Surplus.as.a.pct.of.after.dep.expenses) %>% 
+  #filter(MarketShare < 0.4) %>%  #median(MarketShare, na.rm = TRUE) - 0.25
+  #inner_join(df.qual.exp %>% filter(Year == 2015 & Total < 15000) %>% select(`Grant Number`), by = c("Grant Number")) %>%  #& Zips < 1.75 or 7.75
+  select(`Grant Number`, Year, ID, Att, Sites, Qcomp, Altmans.Z) %>%
+  # inner_join(df.qual.exp %>% filter(Year == 2015) %>%
+  #                                           mutate(ZipFilter = ifelse(Total < 12000, 1,
+  #                                                              ifelse(Total > 12000, 2, NA))) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>%
+  inner_join(df.qual.exp %>% filter(Year == 2016) %>% mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>% 
+  select(Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z) %>% 
+  unique() 
+ 
+#summary(df.qual.exp[df.qual.exp$Year == 2015,]$Qcomp)
+
+for (k in 2:3){
+  
+atts.sum <- rep(0, 7)
+fig4.sum <- rep(0, 5)
+
+if (k ==1){df.sum.root <- df.sum} else
+  if (k == 2){df.sum.root <- df.sum %>% filter(ZipFilter == 2)} else
+    if (k == 3){df.sum.root <- df.sum %>% filter(ZipFilter == 1)} 
+
+  
+
+for (i in 5:ncol(df.sum)){
+  
+  temp <- df.sum.root[,c(1:4, i)]
+  colnames(temp) <- c("Year", "ZipFilter", "ID","Att", "Outcome")
+  temp$Outcome
+  
+  # temp <- temp %>%
+  #   mutate(Outcome = ifelse(Outcome < quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1],
+  #                    ifelse(Outcome > quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], Outcome)))
+
+  
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = temp , 
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = FALSE, 
+                      base_period = "universal"
+                      )
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+atts.sum <- rbind(atts.sum, cbind(colnames(df.sum)[i], round(mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(mean(temp[temp$Att > 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE) - mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se), 3)))
+
+atts <- rbind(atts, cbind(colnames(df.sum)[i], round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn$overall.att, 
+      cs.output.expand.agg.dyn$overall.att - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se, 
+      cs.output.expand.agg.dyn$overall.att + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se), 3)))
+z <- rbind(z, c(colnames(df.sum)[i], cs.output.expand$Wpval))
+
+fig4.sum <- rbind(fig4.sum, 
+                 data.frame(Outcome = colnames(df.sum)[i], 
+                      Year = cs.output.expand.agg.dyn$egt, 
+           Estimate = cs.output.expand.agg.dyn$att.egt, 
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt))
+}
+
+
+
+rownames(fig4.sum) <- NULL
+if (k == 1){atts.sum.full <- atts.sum[-1,]} else 
+ if (k == 2){atts.sum.larger <- atts.sum[-1,]} else 
+   {atts.sum.smaller <- atts.sum[-1,]}
+
+}
+
+#Event Study Plots
+fig4.sum[-1,] %>%
+  ggplot(mapping = aes(x = Year, y = Estimate)) +
+  facet_wrap(~Outcome, scales = "free_y") +
+  ylab("Percentage Points") +
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") +
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") +
+  geom_point() + geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) +
+  ggtitle("fig4 - Event Study") +
+  theme_tufte_revised()
+
+
+
+table.names <- rbind(cbind((df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[2,2], 
+            (df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(Treat) %>% summarise(n()))[1,2]), 
+      cbind((df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[4,3], 
+            (df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[3,3]), 
+      cbind((df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[2,3], 
+            (df.sum %>% mutate(Treat = ifelse(Att > 0, 'Treat','Control')) %>% group_by(ZipFilter, Treat) %>% summarise(n()))[1,3]))
+ 
+## Table
+rbind(atts.sum.larger, atts.sum.smaller) %>% 
+   kable("html", booktabs = T, col.names = c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB")) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Profitable FQHCs" = 3, "Unprofitable/Budget Neutral FQHCs" = 3)) %>% 
+  add_footnote(c("Atlman's Z is a measure of Financial Distress",
+                 "C_0 and T_0 are mean values for each sample in control and treatment groups in first year of panel",
+                 paste("Profitable FQHCs Sample has ", table.names[2,1], "treatment and ", table.names[2,2], " control FQHC-Years"), 
+                 paste("Unprofitable and Budget Neutral FQHCs Sample has ", table.names[3,1], "treatment and ", table.names[3,2], " control FQHC-Years")))
+
+## Better Figure
+f4.picture.full <- rbind(cbind("Full Sample", atts.sum.full), cbind("Profitable", atts.sum.larger), cbind("Unprofitable/Budget Neutral", atts.sum.smaller) ) %>% 
+  as.data.frame()
+
+### Clean up the data
+row.names(f4.picture.full) <- NULL
+colnames(f4.picture.full) <- c("Profitability", "Measure", "C_0", "T_0 - C_0", "Estimate", "LB", "UB")
+f4.picture.full[,3:7] <- sapply(f4.picture.full[,3:7], as.numeric)
+# f4.picture.full$Sample <- factor(f4.picture.full$Sample, levels = c("Full Sample", "More Market Share","Less Market Share"))
+# f4.picture.full$Payor <- gsub(f4.picture.full$Payor, pattern = ".z", replacement = "")
+# f4.picture.full$Payor <- factor(f4.picture.full$Payor, levels = c("None", "MCR","COM","MCD","Total"))
+# f4.picture.full$Model <- factor(f4.picture.full$Model, levels = c("Incumbent Only","Incumbent & Competitor"))
+# f4.picture.full$Total <- ifelse(f4.picture.full$Payor == "Total", "Total", "Payor")
+# f4.picture.full$Total <- factor(f4.picture.full$Total, levels = c("Total","Payor"))
+
+
+### Plot
+f4.p.totals.full <- ggplot(data=f4.picture.full, aes(y=Measure, x=Estimate, xmin=LB, xmax=UB)) +
+geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~Profitability, scales= "free", switch = 'y', space = "free_y")+
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) +
+  ggtitle("Figure 4, FQHC Performance Reactions by Profitability")
+
+f4.p.totals.full
+```
+
+
+## True Figure 3 - Responses
+```{r}
+
+fig3 <- rbind(f3.picture.full %>% rename(Subgroup = MarketShare), f4.picture.full[-c(1:3),] %>% rename(Subgroup = Profitability)) %>% 
+  mutate(Measure = ifelse(Measure == "Sites", "Number of Sites", 
+                   ifelse(Measure == "Qcomp", "Quality of Care", 
+                   ifelse(Measure == "Altmans.Z", "Financial Stability", NA))))
+
+f3.full <- ggplot(data=fig3[1:3,], aes(y=Measure, x=Estimate, xmin=LB, xmax=UB)) +
+  geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~Subgroup, scales= "free", switch = 'y', space = "free_y")+
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) 
+
+
+f3.mark <- ggplot(data=fig3[4:9,], aes(y=Measure, x=Estimate, xmin=LB, xmax=UB)) +
+  geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~Subgroup, scales= "free", switch = 'y', space = "free_y")+
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) 
+
+
+f3.prof <- ggplot(data=fig3[10:15,], aes(y=Measure, x=Estimate, xmin=LB, xmax=UB)) +
+  geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~Subgroup, scales= "free", switch = 'y', space = "free_y")+
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) 
+
+
+
+
+gt <- grid.arrange(f3.full,                            
+             f3.mark, f3.prof,                         
+             ncol = 3, nrow = 2, 
+             layout_matrix = rbind(c(1,  2, 2), c(1,  3, 3)))
+
+
+# Add labels to the arranged plots
+p <- as_ggplot(gt) +                                # transform to a ggplot
+ draw_plot_label(label = c("Panel A", "Panel B", "Panel C"), size = 15,
+                 x = c(0, 0.33, 0.33), y = c(1, 1, 0.5)) # Add labels
+p
+
+
+```
+
+
+## Figure for Paper
+
+```{r}
+df.qual.exp %>% 
+  filter(Year %in% c(2016, 2019)) %>% 
+  mutate(Tx = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Year, Tx) %>% 
+  summarise(mean(Sites, na.rm = TRUE), 
+            mean(Qcomp, na.rm = TRUE), 
+            mean(Altmans.Z, na.rm = TRUE), 
+            mean(Efficiency, na.rm = TRUE)) %>% 
+  arrange(Tx, Year) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(unadj = (V4 - V3) - (V2 - V1) )
+```
+
+
+## Figure for Poster
+
+```{r}
+
+poster.fig3 <- cbind(Group = c(rep("Panel A", 3),rep("Panel B", 6),rep("Panel C", 6)), fig3) %>% 
+  mutate(Measure = as.factor(Measure)) %>% 
+  mutate(Measure = fct_reorder(Measure, desc(Measure))) %>% 
+
+ggplot(aes(y=Subgroup, x=Estimate, xmin=LB, xmax=UB)) +
+geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(Group~Measure, scales = "free", switch = 'y', space = "free_y")+
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines"),  strip.text =  element_text(face = "bold", size = 16))
+
+poster.fig3
+```
+
+
+
+## Figure 5 - Financing
+
+```{r}
+
+
+
+
+df.comp <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>% 
+  ungroup() %>% 
+  #inner_join(df.qual.exp %>% filter(Year == 2015 & Zips < 4.75) %>% select(`Grant Number`), by = c("Grant Number")) %>%  #& Zips < 3.75 or 4.75
+  #filter(MarketShare > median(MarketShare, na.rm = TRUE)) %>% 
+    select(Year, ZipFilter, ID, Att, `Total revenue (unrestricted & restricted)`, `Total net assets`, `Surplus as a pct of before dep expenses`, 
+           `Staffing`, `Liabilities`, `Gross land, buildings and equipment (LBE)`, Liquidity, Profitability, Efficiency, NetWorth)
+ 
+  
+
+for (k in 1:3){
+  
+atts.comp <- rep(0, 7)
+fig3.comp <- rep(0, 5)
+
+if (k ==1){df.comp.root <- df.comp} else
+  if (k == 2){df.comp.root <- df.comp %>% filter(ZipFilter == 2)} else
+    if (k == 3){df.comp.root <- df.comp %>% filter(ZipFilter == 1)} 
+
+  
+
+for (i in 5:ncol(df.comp)){
+  
+ # if (i %in% c(6, 7, 19)){temp <- df.comp.root[df.comp.root$Year %in% c(2015:2019), c(1:4, i)]} else {temp <- df.comp.root[,c(1:4, i)]}
+  temp <- df.comp.root[,c(1:4, i)]
+  #temp <- df.comp.root[df.comp.root$Year %in% c(2015:2019), c(1:4, i)]
+  colnames(temp) <- c("Year", "ZipFilter", "ID","Att", "Outcome")
+  temp$Outcome
+  
+  # temp <- temp %>%
+  #   mutate(Outcome = ifelse(Outcome < quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1],
+  #                    ifelse(Outcome > quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], Outcome)))
+
+  
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = temp, # %>% filter(Year >= 2016), 
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = FALSE, 
+                      base_period = "universal"
+                      )
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+atts.comp <- rbind(atts.comp, cbind(colnames(df.comp)[i], round(mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(mean(temp[temp$Att > 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE) - mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se), 3)))
+
+atts <- rbind(atts, cbind(colnames(df.comp)[i], round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn$overall.att, 
+      cs.output.expand.agg.dyn$overall.att - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se, 
+      cs.output.expand.agg.dyn$overall.att + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se), 3)))
+z <- rbind(z, c(colnames(df.comp)[i], cs.output.expand$Wpval))
+
+fig3.comp <- rbind(fig3.comp, 
+                 data.frame(Outcome = colnames(df.comp)[i], 
+                      Year = cs.output.expand.agg.dyn$egt, 
+           Estimate = cs.output.expand.agg.dyn$att.egt, 
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt))
+}
+
+
+
+rownames(fig3.comp) <- NULL
+if (k == 1){atts.comp.full <- atts.comp[-1,]} else 
+ if (k == 2){atts.comp.larger <- atts.comp[-1,]} else 
+   {atts.comp.smaller <- atts.comp[-1,]}
+
+}
+
+#Event Study Plots
+fig3.comp[-1,] %>%
+  ggplot(mapping = aes(x = Year, y = Estimate)) +
+  facet_wrap(~Outcome, scales = "free_y") +
+  ylab("Percentage Points") +
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") +
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") +
+  geom_point() + geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) +
+  ggtitle("fig3 - Event Study") +
+  theme_tufte_revised()
+
+
+
+
+ cbind(atts.comp.full, atts.comp.larger, atts.comp.smaller) %>% 
+   kable("html", booktabs = T, col.names = rep(c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB"), 3)) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  #pack_rows(index = c("Financial" = 5, "" = 5, "Profitability" = 5)) %>% 
+  add_header_above(c(" " = 1, "Full" = 6, "More Market Share Clinics" = 6, "Less Market Share Clinics" = 6)) %>% 
+  #pack_rows(index = c("Larger FQHCs" = 15, "Smaller FQHCs" = 15)) %>% 
+  add_footnote(c(""))
+
+
+
+```
+
+
+
+
+
+
+## Figure 5 - Financing these changes
+
+
+```{r}
+
+
+df.fin <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>% 
+  ungroup() %>% 
+  #filter(MarketShare > median(MarketShare, na.rm = TRUE)) %>% 
+  select(`Grant Number`, Year, ID, Att, `Total revenue (unrestricted & restricted)`, `Total net assets`, `Surplus as a pct of before dep expenses`, 
+           `Staffing`, `Liabilities`, `Gross land, buildings and equipment (LBE)`, Liquidity, Profitability, Efficiency, NetWorth) %>%
+  inner_join(df.qual.exp %>% filter(Year == 2016) %>% mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>% 
+    select(Year, ZipFilter, ID, Att, `Total revenue (unrestricted & restricted)`, `Total net assets`, `Surplus as a pct of before dep expenses`, 
+           `Staffing`, `Liabilities`, `Gross land, buildings and equipment (LBE)`, Liquidity, Profitability, Efficiency, NetWorth)
+
+for (k in 1:3){
+  
+atts.fin <- rep(0, 7)
+fig3.fin <- rep(0, 5)
+
+if (k ==1){df.fin.root <- df.fin} else
+  if (k == 2){df.fin.root <- df.fin %>% filter(ZipFilter == 2)} else
+    if (k == 3){df.fin.root <- df.fin %>% filter(ZipFilter == 1)} 
+
+  
+
+for (i in 5:ncol(df.fin)){
+  
+  temp <- df.fin.root[,c(1:4, i)]
+  #temp <- df.fin.root[df.fin.root$Year %in% c(2015:2019), c(1:4, i)]
+  colnames(temp) <- c("Year", "ZipFilter", "ID","Att", "Outcome")
+  temp$Outcome
+  
+  # temp <- temp %>%
+  #   mutate(Outcome = ifelse(Outcome < quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[1],
+  #                    ifelse(Outcome > quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], quantile(temp$Outcome, probs = c(0.05, 0.95), na.rm = TRUE)[2], Outcome)))
+
+  
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = temp, # %>% filter(Year >= 2016), 
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = FALSE, 
+                      base_period = "universal"
+                      )
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+atts.fin <- rbind(atts.fin, cbind(colnames(df.fin)[i], round(mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(mean(temp[temp$Att > 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE) - mean(temp[temp$Att == 0 & temp$Year == min(temp$Year),]$Outcome, na.rm = TRUE), 3), round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se), 3)))
+
+atts <- rbind(atts, cbind(colnames(df.fin)[i], round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn$overall.att, 
+      cs.output.expand.agg.dyn$overall.att - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se, 
+      cs.output.expand.agg.dyn$overall.att + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se), 3)))
+z <- rbind(z, c(colnames(df.fin)[i], cs.output.expand$Wpval))
+
+fig3.fin <- rbind(fig3.fin, 
+                 data.frame(Outcome = colnames(df.fin)[i], 
+                      Year = cs.output.expand.agg.dyn$egt, 
+           Estimate = cs.output.expand.agg.dyn$att.egt, 
+           CILB = cs.output.expand.agg.dyn$att.egt - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt,
+           CIUB = cs.output.expand.agg.dyn$att.egt + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$se.egt))
+}
+
+
+
+rownames(fig3.fin) <- NULL
+if (k == 1){atts.fin.full <- atts.fin[-1,]} else 
+ if (k == 2){atts.fin.larger <- atts.fin[-1,]} else 
+   {atts.fin.smaller <- atts.fin[-1,]}
+
+}
+
+#Event Study Plots
+fig3.fin[-1,] %>%
+  ggplot(mapping = aes(x = Year, y = Estimate)) +
+  facet_wrap(~Outcome, scales = "free_y") +
+  ylab("Percentage Points") +
+  geom_vline(xintercept=-0.5, linetype = "dashed", color = "red") +
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") +
+  geom_point() + geom_errorbar(aes(ymin=CILB, ymax=CIUB), width=.2) +
+  ggtitle("fig3 - Event Study") +
+  theme_tufte_revised()
+
+
+
+
+ cbind(atts.fin.full, atts.fin.larger, atts.fin.smaller) %>% 
+   kable("html", booktabs = T, col.names = rep(c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB"), 3)) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("General Measures" = 4, "Altmans Z Components" = 5)) %>% 
+  add_header_above(c(" " = 1, "Full" = 6, "Profitable" = 6, "Unprofitable" = 6)) %>% 
+  #pack_rows(index = c("Larger FQHCs" = 15, "Smaller FQHCs" = 15)) %>% 
+  add_footnote(c(""))
+```
+
+
+
+## True Figure 4
+```{r}
+fields <- 10
+fig4 <- cbind(c(rep("Full", fields), rep("More Market Share", fields), rep("Less Market Share", fields), rep('Profitable', fields), rep('Unprofitable/Budget Neutral', fields)), 
+      rbind(atts.comp.full, atts.comp.larger, atts.comp.smaller, atts.fin.larger, atts.fin.smaller)) %>% 
+  data.frame() 
+
+colnames(fig4) <- c("Subgroup", "Measure", "C_0", "T_0 - C_0", "Estimate", "LB", "UB")
+
+fig4$Measure <- ifelse(fig4$Measure == 'Gross land, buildings and equipment (LBE)', 'Property and Buildings', fig4$Measure)
+
+
+fig4$C_0 <- as.numeric(fig4$C_0)
+fig4$`T_0 - C_0` <- as.numeric(fig4$`T_0 - C_0`)
+fig4$Estimate <- as.numeric(fig4$Estimate)
+fig4$LB <- as.numeric(fig4$LB)
+fig4$UB <- as.numeric(fig4$UB)
+
+fig4$Groups <- ifelse(fig4$Measure %in% c('Total revenue (unrestricted & restricted)','Property and Buildings','Staffing', 'Liabilities'), 'Mechanisms', 
+               ifelse(fig4$Measure %in% c('Liquidity','Efficiency'), 'Financing', NA))
+
+rownames(fig4) <- NULL
+
+
+
+fig4 %>% 
+  filter(Groups == 'Mechanisms' ) %>% 
+ggplot(aes(y=Measure, x=Estimate, xmin=LB, xmax=UB)) +
+geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5) +
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~Subgroup, scales = "free_y", switch = 'y', space = "free_y")+
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) +
+  ggtitle("Figure 2, Incumbent Only (FQHC-zip-year units)")
+
+
+
+# fig4 %>% 
+#   select(Measure:UB) %>% 
+#   filter(Measure %notin% c('Total revenue (unrestricted & restricted)', 'Total expenses before depreciation', 'Surplus as a pct of before dep expenses')) %>% 
+#   kable("html", booktabs = T, col.names = c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB")) %>%
+#   kable_styling(latex_options = c("striped")) %>%
+#   pack_rows(index = c("General Measures" = 4, "Altmans Z Components" = 5)) %>% 
+#   add_header_above(c(" " = 1, "Full" = 6, "Profitable" = 6, "Unprofitable" = 6)) %>% 
+#   #pack_rows(index = c("Larger FQHCs" = 15, "Smaller FQHCs" = 15)) %>% 
+#   add_footnote(c(""))
+
+library(formattable)
+fig4$C_0 <- currency(fig4$C_0, digits = 0L)
+fig4$`T_0 - C_0` <- currency(fig4$`T_0 - C_0`, digits = 0L)
+fig4$Estimate <- currency(fig4$Estimate, digits = 0L)
+fig4$LB <- currency(fig4$LB, digits = 0L)
+fig4$UB <- currency(fig4$UB, digits = 0L)
+
+fig4 %>% 
+  filter(Groups == 'Mechanisms' ) %>% 
+  select(Measure:UB) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome", "C_0", "T_0 - C_0", "DID Estimate", "LB", "UB")) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  row_spec(c(6, 14),bold=T, italic = T, hline_after = T) %>% 
+  row_spec(c(19),bold=F, italic = T, hline_after = T) %>% 
+  pack_rows(index = c("Panel A: Full Sample" = 4, "Panel B: Higher Low-Income Market Share Subgroup" = 4, "Panel B: Lower Low-Income Market Share Subgroup" = 4, 
+                      "Panel C: Profitable Subgroup" = 4, "Panel C: Unprofitable/Budget Neutral Subgroup" = 4)) %>% 
+  #add_header_above(c(" " = 1, "Full" = 6, "Profitable" = 6, "Unprofitable" = 6)) %>% 
+  #pack_rows(index = c("Larger FQHCs" = 15, "Smaller FQHCs" = 15)) %>% 
+  add_footnote(c(""))
+
+```
+
+
+
+
+
+
+# Robustness Testing
+
+
+
+## Service Area Overlap measurement - Plausible Exogeneity
+
+- >99% of zips in sample have unmet Low income, Medicaid, or Uninsured need at baseline
+- Distance of Rival's new zip code to nearest existing zip code in service area,  75% are below 10km. All those > 10km to nearest site are in rural areas traveling across very low density land
+```{r}
+
+## Need
+df.z.full %>% 
+  filter(Year == 2015) %>% 
+  left_join(census, by = c("Zip" = "ZipCode", "Year" = "YEAR")) %>% 
+  mutate(Pct.Total = Total.z / TotalPop, Pct.LowInc = Total.z / (IncomeBelowPoverty / PovertyStatusDet * TotalPop), Pct.MCD = MCD.z / (Medicaid / MCD.denom * TotalPop), Pct.None = None.z / (Uninsured / Unins.denom * TotalPop) ) %>% 
+  select(Zip:Att.z, Pct.Total:Pct.None) %>% 
+  mutate(NeedMore = ifelse(Pct.LowInc < 1 | Pct.MCD < 1 | Pct.None < 1, 1, 0), 
+         Tx = ifelse(Att.z > 0, 1, 0)) %>% 
+  #group_by(Tx) %>% 
+  mutate(#n(), 
+            NeedMore = NeedMore, 
+            NeedLowIncome = ifelse(Pct.LowInc < 1, 1, 0), 
+            NeedMCD = ifelse(Pct.MCD < 1, 1, 0),
+            NeedNone = ifelse(Pct.None < 1, 1, 0)) %>% 
+  select(Tx, NeedMore:NeedNone) %>% 
+  filter(!is.na(NeedMore)) %>% 
+  tbl_summary(by = Tx) %>% 
+  add_p()
+
+
+## Distance of Competitor to New Site
+df.z.dist <- df.z.full %>% 
+  filter(Att.z == Year) %>% 
+  select(Zip:Total.z) %>% 
+  left_join(uds.sites %>% select(`Grant Number`, Year, Zip) %>% unique(), by = c("Zip","Year")) %>% 
+  left_join(df.z %>% filter(Tx == 1) %>% select(`Grant Number`, Year, Zip) %>% unique(), by = c("Zip","Year")) %>% 
+  filter(`Grant Number.x` != `Grant Number.y`)
+
+## Read in Centroid Data
+zip.centroids <- read.csv("ZIP_Code_Population_Weighted_Centroids.csv") %>% 
+  mutate(ZipCode = str_pad(STD_ZIP5, 5, pad = "0")) %>% 
+  select(ZipCode, X, Y)
+## Add missing centroids
+zip.centroids <- rbind(zip.centroids, c(ZipCode = "37243", X = -86.783, Y = 36.165), 
+                                      c(ZipCode = "95951", X = -121.98, Y = 39.73)) %>% 
+  mutate(X = as.numeric(X), Y = as.numeric(Y))
+
+df.z.dist <- df.z.dist %>% mutate(DistToClosestSite = NA, ZipOfClosestSite = NA)
+
+for (g in 1:nrow(df.z.dist)){
+#g <- 3
+ temp <- rbind(zip.centroids %>% filter(ZipCode == df.z.dist[g,]$Zip), 
+          zip.centroids %>% filter(ZipCode %in% unique(uds.sites[uds.sites$`Grant Number` == df.z.dist[g,]$`Grant Number.x` & uds.sites$Year == df.z.dist[g,]$Year,]$Zip))) %>% 
+   unique()
+  mm <- as.matrix(dist(as.matrix(temp$X, temp$Y), method = "euclidean"))[-1,1]
+  df.z.dist[g,]$DistToClosestSite <-  min(mm) * 111.139
+  df.z.dist[g,]$ZipOfClosestSite  <- ifelse(is.na(temp[2,]$ZipCode), temp[1,]$ZipCode, unlist(temp[-1,]$ZipCode[rank(mm) == 1]))
+}
+
+df.z.dist[19,]$DistToClosestSite <- 0
+
+
+mean(df.z.dist$DistToClosestSite)
+quantile(df.z.dist$DistToClosestSite, probs = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1))
+
+mean(df.z.dist[df.z.dist$ZipFilter == 1,]$DistToClosestSite)
+mean(df.z.dist[df.z.dist$ZipFilter == 2,]$DistToClosestSite)
+
+quantile(df.z.dist[df.z.dist$ZipFilter == 1,]$DistToClosestSite, probs = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1))
+quantile(df.z.dist[df.z.dist$ZipFilter == 2,]$DistToClosestSite, probs = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1))
+
+
+zipsize <- zctas(starts_with = c(df.z.dist$Zip, df.z.dist$ZipOfClosestSite), year = 2010)
+
+
+## Original Figure
+df.z.dist.plot <- df.z.dist %>% 
+  left_join(zipsize %>% select(GEOID10, ALAND10), by = c("Zip" = "GEOID10")) %>% 
+  left_join(uds.sites %>% select(Zip, `Site State`) %>% unique(), by = c("Zip")) %>% 
+  left_join(census %>% select(ZipCode, YEAR, TotalPop), by = c("Year" = "YEAR", "Zip" = "ZipCode")) %>% 
+  arrange(desc(DistToClosestSite)) %>% 
+  mutate(Area.SQmiles = ALAND10 / 2.59e6) %>% 
+  mutate(Density.NewZip = TotalPop / Area.SQmiles, 
+         l.density = log(TotalPop / Area.SQmiles))
+
+
+df.z.dist.plot %>% 
+  ggplot(aes(x = log(Density.NewZip), y = DistToClosestSite)) + geom_point(aes(size = Area.SQmiles)) +
+  ggtitle("Distance from Rival's newly competing zip ocde to closest incumbent zip code by Density and Area of newly competing zip code")
+
+summary(lm(DistToClosestSite ~ log(Density.NewZip), data = df.z.dist.plot))
+
+
+
+# Updated Figure
+df.z.dist.plot <- df.z.dist.plot %>% 
+  select(Zip:ZipOfClosestSite, Density.NewZip) %>% 
+  left_join(zipsize %>% select(GEOID10, ALAND10), by = c("ZipOfClosestSite" = "GEOID10")) %>% 
+  left_join(uds.sites %>% select(Zip, `Site State`) %>% unique(), by = c("ZipOfClosestSite" = "Zip")) %>% 
+  left_join(census %>% select(ZipCode, YEAR, TotalPop), by = c("Year" = "YEAR", "ZipOfClosestSite" = "ZipCode")) %>% 
+  arrange(desc(DistToClosestSite)) %>% 
+  mutate(Area.SQmiles = ALAND10 / 2.59e6) %>% 
+  mutate(Density.Origin = TotalPop / Area.SQmiles)
+
+
+df.z.dist.plot %>% 
+  ggplot(aes(x = log(Density.NewZip), y = DistToClosestSite, color = log(Density.Origin))) + geom_point() +
+  scale_colour_gradientn(colours = terrain.colors(10))+ theme_minimal()+
+  ylab("Distance from Competative to closest Rival Site (km)") +
+  ggtitle("Distance from newly competative Zip to Rival's closest existing zip, by log Density of areas")
+
+
+p <- df.z.dist.plot %>% 
+  ggplot(aes(x = log(Density.Origin), y = log(Density.NewZip))) + 
+  geom_point(aes(size = DistToClosestSite, colour = DistToClosestSite)) + 
+  scale_colour_gradientn(colours = c("green","lightblue","purple"),
+                         values = c(1.0,0.7,0.1,0))  +#scale_colour_gradientn(colours = terrain.colors(10))+ 
+  theme_minimal() + ylab("Log Population Density of New Zip Code") + 
+  xlab("Log Population Density of Nearest Service Area Zip Code") + 
+  labs(color = "Distance Travelled to\nOpenNew Site (km)") + 
+  guides(size = FALSE) + xlim(0.5, 11.5) + ylim(0.5, 11.5)
+p
+
+
+summary(lm(log(Density.Origin) ~ log(Density.NewZip), data = df.z.dist.plot))
+
+
+```
+
+
+## Estimate effects of competition on nearest FQHC, takes 20 minutes to run code
+```{r}
+
+## Build the first part of the dataset
+
+df.spill <- df.z %>% 
+  left_join(df.z.dist %>% 
+  select(`Grant Number.y`, Zip) %>% 
+    unique() %>% 
+    rename(ZipOfComp = Zip), by = c("Grant Number" = "Grant Number.y")) %>% 
+  #filter(!is.na(ZipOfComp)) %>% 
+  mutate(ZipOfComp = ifelse(`Grant Number` == "H80CS00765", 95991, ZipOfComp)) %>% 
+  left_join(zip.centroids, by = c("Zip" = "ZipCode")) %>% 
+  left_join(zip.centroids, by = c("ZipOfComp" = "ZipCode")) %>% 
+  mutate(Dist = sqrt((X.x - X.y) ^ 2 + (Y.x - Y.y) ^ 2) * 111.139) %>% 
+  mutate(Dist.f = ifelse(is.na(Dist), "-1",
+                  ifelse(Dist == 0, 0, 
+                  ifelse(Dist > 0 & Dist < 20, 1, 
+                  ifelse(Dist >= 20 & Dist < 50, 2, 3))))) %>% 
+  #filter(is.na(Dist.f) | Dist.f == 2) %>% 
+  left_join(uds.sites %>% 
+              filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
+              mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
+                                ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
+                     Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
+                                ifelse(`Operational Schedule` == "Part-Time", 0.5, 0)),
+                     Calendar = ifelse(`Calendar Schedule` == "Year-Round", 1,
+                                ifelse(`Calendar Schedule` == "Seasonal", 0.5, 0))) %>% 
+              group_by(`Grant Number`, Year, Zip) %>% 
+              summarise(Sites = n(), Mean.Hours = mean(Access, na.rm = TRUE), Total.Hours = sum(Access, na.rm = TRUE), 
+                        Perminance = sum(Type.num, na.rm = TRUE), Schedule = sum(Schedule, na.rm = TRUE), Calendar = sum(Calendar, na.rm = TRUE)), by = c("Grant Number","Year", "Zip")) %>% 
+  mutate(Sites = ifelse(is.na(Sites), 0, Sites), 
+         Mean.Hours = ifelse(is.na(Mean.Hours), 0, Mean.Hours), 
+         Total.Hours = ifelse(is.na(Total.Hours), 0, Total.Hours), 
+         Perminance = ifelse(is.na(Perminance), 0, Perminance), 
+         Schedule = ifelse(is.na(Schedule), 0, Schedule), 
+         Calendar = ifelse(is.na(Calendar), 0, Calendar))
+
+dist.vecs <- df.spill[!is.na(df.spill$Dist),]$Dist
+
+df.spill %>% 
+  group_by(Dist.f) %>% 
+  summarise(n())
+
+
+
+## Find neighbors based on some circle around FQHC zip
+
+mm <- dist(zip.centroids[,2:3])
+mm <- as.matrix(mm) * 111.139
+
+mm.2 <- mm[zip.centroids$ZipCode %in% unique(df.spill$Zip),]
+
+mm.2 <- as.matrix((mm.2 < 50) + 0 )
+rowSums(mm.2)
+
+
+
+mm.3 <- c(CenterZip = 0, Year = 0, Competing.Sites = 0)
+for (g in 1:dim(mm.2)[1]){
+  mm.3 <- rbind(mm.3, cbind(CenterZip = zip.centroids[rownames(mm.2)[g],]$ZipCode, zip.centroids[names(mm.2[g,][which(as.vector(mm.2[g,] == 1))]),]) %>% 
+  left_join(uds.sites %>% filter(Year %in% c(2015:2019)) %>% group_by(Year, Zip) %>% summarise(Sites.Total = n()), by = c("ZipCode" = "Zip")) %>% 
+  left_join(df.spill %>% select(`Grant Number`, Year, Zip, Sites), by = c("ZipCode" = "Zip", "Year")) %>% 
+  mutate(Sites.Total = ifelse(is.na(Sites.Total), 0, Sites.Total), 
+         Sites = ifelse(is.na(Sites), 0, Sites), 
+         Competing.Sites = Sites.Total - Sites) %>% 
+  filter(CenterZip != ZipCode) %>% 
+  group_by(CenterZip, Year) %>% 
+  summarise(Competing.Sites = sum(Competing.Sites)) %>% 
+    as.matrix())
+}
+
+mm.3 <- mm.3[-1,]
+
+#mm.100 <- mm.3 %>% data.frame() 
+#mm.60 <- mm.3 %>% data.frame() 
+#mm.50 <- mm.3 %>% data.frame() 
+#mm.20 <- mm.3 %>% data.frame() 
+#mm.10 <- mm.3 %>% data.frame() 
+
+#mm.3 <- mm.50 
+
+
+```
+
+
+```{r}
+cs.output.expand <- att_gt( yname = "Total.Hours",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = df.spill %>% filter(Dist.f %in% c("-1",3)), # %>% filter(Year > 2015),
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = TRUE,
+                      base_period = "universal"
+                      )
+aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+```
+
+
+
+## Control for spatial Spillovers
+```{r}
+
+
+
+df.spill2 <- df.spill %>% 
+  left_join(mm.3 %>% data.frame() %>% mutate(Year = as.numeric(Year)), by = c("Zip" = "CenterZip","Year")) %>% 
+  mutate(Competing.Sites = as.numeric(ifelse(is.na(Competing.Sites), 0, Competing.Sites)), 
+         D = ifelse(Competing.Sites > 0, 1, 0))
+
+#length(unique(df.spill2[is.na(df.spill2$Dist),]$Zip))  1893 or 1893 * 5
+
+set.seed(234)  #232
+df.spill2 <- df.spill2 %>% mutate(Dist = ifelse(is.na(Dist), rep(sample(dist.vecs, 1893, replace = T), each = 5), Dist), 
+                                  Att.viz = ifelse(Att == 0, rep(sample(c(2017:2019), 1893, replace = T), each = 5), Att)) %>% 
+  mutate(Dist.rounded = as.factor(ceiling(Dist / 10))) 
+
+
+df.spill2 <- df.spill2 %>% 
+  ungroup() %>% 
+  #filter(MarketShare < median(MarketShare, na.rm = TRUE)) %>% 
+  select(`Grant Number`, Tx, D, Att, Att.viz, Dist, Dist.rounded, Year, Zip, Total.Hours, Sites, Perminance, Schedule, Calendar, Total.z, MCD.z, MCR.z, COM.z, None.z) %>%
+  inner_join(df.qual.exp %>% filter(Year == 2016) %>% mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>% 
+    select(Tx, D, Dist, Year, Zip, `Grant Number`, ZipFilter, Att, Att.viz, Dist.rounded, Total.Hours, Sites, Perminance, Schedule, Calendar, Total.z, MCD.z, MCR.z, COM.z, None.z) # %>% filter(ZipFilter == 2)
+
+  i <- 11
+  df.temp <- df.spill2[,c(1:5, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
+  model_feols_clustered <- feols(Outcome ~ Tx*as.numeric(Dist / 10) + D | Year + Zip, cluster = ~ Zip, data = df.temp)
+  TEs <- data.frame(model_feols_clustered$coeftable)[1,]
+  TEs_Dist <- data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),]
+
+
+for (i in 12:20){
+  df.temp <- df.spill2[,c(1:5, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
+  model_feols_clustered <- feols(Outcome ~ Tx*as.numeric(Dist / 10) + D | Year + Zip, cluster = ~ Zip, data = df.temp)
+  TEs <- rbind(TEs, data.frame(model_feols_clustered$coeftable)[1,])
+  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),])
+}
+
+
+
+p.spill <- df.spill2 %>% 
+  mutate(Treats = ifelse(Att == 0 & Year >=  Att.viz, 1, Tx)) %>% 
+  filter(Att > 0) %>% 
+  group_by(Dist.rounded, Treats) %>% 
+  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), Total.z = mean(Total.z, na.rm = TRUE), Total.Hours = mean(Total.Hours, na.rm = TRUE), MCD.z = mean(MCD.z, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, Total.z, Total.Hours, MCD.z)) %>% 
+  mutate(Sites = Sites_1 - Sites_0, 
+         Total.z = Total.z_1 - Total.z_0, 
+         Total.Hours = Total.Hours_1 - Total.Hours_0, 
+         MCD.z = MCD.z_1 - MCD.z_0) %>% 
+  left_join(df.spill2 %>% 
+  mutate(Treats = ifelse(Att == 0 & Year >= Att.viz, 1, Tx)) %>% 
+  filter(Att == 0) %>% 
+  group_by(Dist.rounded, Treats) %>% 
+  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), Total.z = mean(Total.z, na.rm = TRUE), Total.Hours = mean(Total.Hours, na.rm = TRUE), MCD.z = mean(MCD.z, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, Total.z, Total.Hours, MCD.z)) %>% 
+  mutate(Sites.control = Sites_1 - Sites_0, 
+         Total.z.control = Total.z_1 - Total.z_0, 
+         Total.Hours.control = Total.Hours_1 - Total.Hours_0, 
+         MCD.z.control = MCD.z_1 - MCD.z_0) %>% 
+    select(Dist.rounded, Sites.control:MCD.z.control), by = c("Dist.rounded")) %>% 
+  mutate( Locations = Sites - Sites.control, 
+         `Patients` = Total.z - Total.z.control, 
+         `Patients - Medicaid Only` = MCD.z - MCD.z.control, 
+         `Hours per Week` = Total.Hours - Total.Hours.control) %>% 
+  select(Dist.rounded:Counts_1, `Locations`:`Hours per Week`) %>% 
+  mutate(Dist.rounded = as.numeric(paste(Dist.rounded, 0, sep = ""))) %>% 
+  pivot_longer(cols = c( `Locations`:`Hours per Week`)) %>% 
+  mutate(`Treated Zips` = Counts_0 / 3) %>% 
+  ggplot(aes(x = Dist.rounded, y = value)) + geom_point(aes(size = `Treated Zips`)) + facet_wrap(~name, scales = "free_y", ncol = 2) + xlim(0, 200) + 
+  xlab("Kilometers to Competitive Zip") + ylab("Unadjusted Difference-in-differences") + theme_tufte_revised() + 
+  geom_smooth(method = "lm", se = F, quiet = TRUE, formula = "y ~ x", mapping = aes(weight = `Treated Zips`)) + 
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") + theme(text = element_text(size = 16)) + theme(title = element_text(face = "bold")) + 
+  ggtitle("Figure 4 - Unadjusted DID Estimates by Distance to Competitive Zip")
+
+
+
+suppressWarnings(print(p.spill))
+
+
+output <- cbind(TEs %>% 
+  mutate(`95% LB` = Estimate - `Std..Error` * 1.96, 
+         `95% UB` = Estimate + `Std..Error` * 1.96) %>% 
+    select(Estimate,`95% LB`, `95% UB`) , 
+
+TEs_Dist %>% 
+  mutate(`95% LB` = Estimate - `Std..Error` * 1.96, 
+         `95% UB` = Estimate + `Std..Error` * 1.96) %>% 
+    select(Estimate,`95% LB`, `95% UB`)) 
+rownames(output) <- c("Hours Per Week","Locations","Perminance","Weekly Schedule","Calendar Schedule","Total","Medicaid","Medicare","Commerical","Uninsured")
+
+
+
+round(output[c(6:10, 2,3, 1, 4, 5),], digits = 3) %>% 
+  kable("html", booktabs = T, col.names = c("DID Estimate", "95% LB", "95% UB", "DID Estimate", "95% LB", "95% UB")) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Patient Panel" = 5, "Extensive Margin" = 2, "Intensive Margin" = 3)) %>% 
+  add_header_above(c(" " = 1, "Treatment Effect" = 3, "Treatment Effect * Distance" = 3)) %>% 
+  add_footnote(c("Treatment Effect is the ATT estimated in the zip code where the rival opens their new location","Treatment Effect * Distance is the change in the ATT for every 10km an outlying zip code in the incumbent's service area is from the competitive zip "))
+```
+
+
+## Preperiod parallel trends
+```{r}
+
+i <- 4
+df.temp2 <- df.spill2 %>% filter(Att == 0 | Year < Att) %>% mutate(Treat = ifelse(Att > 0, 1, 0)) %>% 
+                   select(Year, Treat, Zip, Total.Hours:None.z)
+df.temp2 <- df.temp2[,c(1:3, i)]
+names(df.temp2) <- c('Year','Treat','Zip','Outcome')
+
+parallel.trends.set <- data.frame(feols(Outcome ~ Treat * Year, 
+                 data = df.temp2)$coeftable)[4,]
+
+for (i in 5:13){
+  df.temp2 <- df.spill2 %>% filter(Att == 0 | Year < Att) %>% mutate(Treat = ifelse(Att > 0, 1, 0)) %>% 
+                   select(Year, Treat, Zip, Total.Hours:None.z)
+df.temp2 <- df.temp2[,c(1:3, i)]
+names(df.temp2) <- c('Year','Treat','Zip','Outcome')
+
+parallel.trends.set <- rbind(parallel.trends.set, data.frame(feols(Outcome ~ Treat * Year , 
+                 data = df.temp2)$coeftable)[4,])
+}
+parallel.trends.set
+```
+
+
+## Again, with did2s
+```{r}
+did2s(
+      data = df.spill2, 
+      yname = "MCD.z", 
+      treatment = "Tx",
+        first_stage = ~ 0 | Zip + Year + D, 
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10)),
+        cluster_var = "Zip",
+      verbose = FALSE
+    )
+
+
+```
+
+
+## How do close versus far zip codes compare
+
+```{r}
+
+df.temp3 <- df.spill2 %>% 
+  left_join(census, by = c("Zip" = "ZipCode", "Year" = "YEAR" )) %>% 
+    filter(Year %in% c(2015:2016) & Att > 0) %>% 
+  mutate(Pct.Age = Age65andOver / TotalPop * 100, 
+         Pct.Pov = IncomeBelowPoverty / PovertyStatusDet * 100, 
+         Pct.HL = Hispanic / TotalPop * 100, 
+         Pct.Black = Black / TotalPop * 100,
+         Pct.White = White / TotalPop * 100,
+         Pct.Unemp = Unemployed / Unemp_denom * 100,
+         Pct.MCD = Medicaid / MCD.denom * 100, 
+         Pct.NoIns = Uninsured / Unins.denom * 100) %>% 
+  select(Dist, Pct.Age, Pct.HL, Pct.Black, Pct.White, Pct.Pov, Pct.Unemp, Pct.MCD, Pct.NoIns)
+
+ziptypes <- data.frame(0, 0, 0, 0)
+for (k in 2:ncol(df.temp3)){
+  df.temp4 <- df.temp3[,c(1, k)]
+  names(df.temp4) <- c('Dist','Outcome')
+  
+  ziptypes <- rbind(ziptypes, summary(lm(data = df.temp4, Outcome ~ as.numeric(Dist / 10) ))$coeff[2,])
+}
+ziptypes <- ziptypes[-1,]
+
+rownames(ziptypes) <- c("% age over 65+","% Hispanic/Latino","% Black","% White", "% Poverty","% Unemployed","% Medicaid","% Uninsured")
+
+ziptypes %>% 
+  mutate(Estimate = X0, 
+         `95% LB` = X0 - X0.1 * 1.96, 
+         `95% UB` = X0 + X0.1 * 1.96, 
+         `p-value` = X0.3) %>% 
+  select(Estimate:`p-value`) %>% 
+  kable("html", booktabs = T) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Demographics" = 4, "Income" = 2, "Insurance" = 2)) %>% 
+  row_spec(c(1, 4), bold = T, hline_after = T) %>% 
+  row_spec(c(3, 5:8), italic = T, hline_after = T) %>% 
+  add_footnote(c("For every 10 km between the competing zip code and the zip code of interest, the covariate rate will change by the estimated coefficient"))
+
+```
+
+
+
+
+
+
+## Balance on Covariates
+```{r}
+
+
+
+df.qual.exp %>% 
+  mutate(Treat = ifelse(Att > 0, 1, 0)) %>% 
+  mutate(Groups = ifelse(Treat == 1 & Expandor == 0, "Treated", 
+                  ifelse(Treat == 0 & Expandor == 0, "Control", 
+                  ifelse(Treat == 0 & Expandor == 1, "Expandor Comp", "Expandor No Comp")))) %>% 
+  filter(Year == 2015) %>%  #z & ZipFilter == 2) %>% 
+  select(Sites, Zips, #MarketShare, 
+         Total, Density, Pct.Rural, Pct.Urban, None:MCD, IMM2yo:DepScrn, Groups, Pct.NHA:Pct.NHW, Pct.LessThan200pctFPL, Pct.Homeless:Pct.Children, `Liabilities (as pct of assets)`, `Gross land, buildings and equipment (LBE)`, `Surplus as a pct of after dep expenses`) %>% #SwitchEMR, InterOrgHITexchange, UDSQualRep.highlowuse, 
+  tbl_summary(by = Groups, 
+              statistic = all_continuous() ~ "{mean} ({sd})") %>% 
+  add_p(test = everything() ~ "t.test") 
+
+```
+
+
+## Treated vs Rivals
+```{r}
+
+# rbind(uds.covariates %>% filter(Year == 2015 & `Grant Number` %in% c(unique(df.z.dist.plot$`Grant Number.x`)) ) %>% mutate(Class = "Incumbent"), 
+#       uds.covariates %>% filter(Year == 2015 & `Grant Number` %in% c(unique(df.z.dist.plot$`Grant Number.y`)) ) %>% mutate(Class = "Rival")) %>% 
+#   tbl_summary(by = Class) %>% 
+#   add_p()
+  
+
+```
+
+
+## Mapping Quality Function
+```{r}
+p <- seq(0, 1, 0.05)
+v <- c(1:10)
+
+
+for (i in 1:10){
+  p <- i / 10
+  y <- 1 - (1 - p)^v
+  y.prime = -(1 - p)^v*log(1 - p) - y/v
+  #plot(v, y, main = paste("p = ", p, sep = "")) ## For regular trade offs
+  plot(v, y.prime, main = paste("p = ", p, sep = "")) ## for denominator sign checking
+}
+
+
+## Checking the total differential on quality to see what happens
+dd <- merge(merge(seq(0.2, 0.8, 0.05), c(1:5)) %>% rename(p = x, v = y), 
+        c(seq(-5, -1, 0.5), seq(1, 5, 0.5)) ) %>% 
+  rename(dv = y) %>% 
+  mutate(dp = (-(1 - p)^v*log(1 - p) - (1 - (1 - p)^v)/v)*( v*(1 - p)^(v-1) )^-1 * dv) %>% 
+    mutate(dq = -(1 - p)^v*log(1 - p) * dv + v*(1 - p)^(v-1) * dp) %>% 
+  filter(dv > -abs(v))
+  
+summary(dd[complete.cases(dd),]$dq)
+
+dd %>% filter(dq == min(dd$dq, na.rm = TRUE))
+dd %>% filter(dq == max(dd$dq, na.rm = TRUE))
+
+plot(dd[dd$v == 3,]$dv, dd[dd$v == 3,]$dq)
+
+
+ggplot(data = dd, aes(x = p, y = dq, color = dv)) + geom_point() + facet_wrap(~v)
+
+summary(df.qual.exp$Qcomp)
+
+```
+
+
+
+
+
+## Placebo
+
+
+```{r}
+
+df.placebo <- df.qual.exp %>% 
+  #filter(ZipFilter == 2) %>% 
+select(Year, ID, Att, Pct.NHA:Pct.Children) 
+# %>% 
+#   inner_join(df.qual.exp %>% filter(Year == 2016) %>% mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% select(ID, ZipFilter), by = c("ID")) %>% 
+#   filter(ZipFilter == 2) %>% 
+#     select(Year, ID, Att, Pct.NHA:Pct.Children) 
+
+
+
+atts.placebo <- rep(0, 7)
+for (i in 5:ncol(df.placebo)){
+  
+  temp <- df.placebo[,c(1:3, i)]
+  colnames(temp) <- c("Year","ID","Att","Outcome")
+  
+  
+cs.output.expand <- att_gt( yname = "Outcome",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = temp,
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = FALSE, 
+                      base_period = "universal"
+                      )
+cs.output.expand.agg.dyn.0 <- aggte(cs.output.expand, type = "simple", na.rm = TRUE)
+cs.output.expand.agg.dyn <- aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+
+atts.placebo <- rbind(atts.placebo, cbind(colnames(df.placebo[,i]), round(cbind(cs.output.expand.agg.dyn.0$overall.att, 
+      cs.output.expand.agg.dyn.0$overall.att - 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn.0$overall.att + 1.96 * cs.output.expand.agg.dyn.0$overall.se, 
+      cs.output.expand.agg.dyn$overall.att, 
+      cs.output.expand.agg.dyn$overall.att - cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se, 
+      cs.output.expand.agg.dyn$overall.att + cs.output.expand.agg.dyn$crit.val.egt * cs.output.expand.agg.dyn$overall.se), 3)))
+
+}
+
+#if (k == 1){atts.placebo.larger <- atts.placebo[-1,]} else {atts.placebo.smaller <- atts.placebo[-1,]}
+
+#rownames(atts.placebo.larger) <- NULL
+#atts.placebo.larger
+#atts.placebo.smaller
+
+as.data.frame(atts.placebo[-1,]) %>% 
+  rename(Measure = V1, Estimate = V2, `95%CI_LB` = V3, `95%CI_UB` = V4)
+```
+
+
+
+
+
+
+## multiple hypothesis correction, pre-period parallel trends
+```{r}
+
+
+# rownames(atts) <- rep(NULL, nrow(atts))
+# if (k == 1){atts.larger <- atts} else {atts.smaller <- atts}
+# 
+
+# p-values rankings, Benjamini-Hochberg procedure
+cbind(Sample = c(rep("Panel A: Full Sample", 3), 
+                    rep("Panel B: Higher Low-Income Market Share Subgroup", 3), 
+                    rep("Panel B: Lower Low-Income Market Share Subgroup", 3), 
+                    rep("Panel C: Profitable Subgroup", 3), 
+                    rep("Panel C: Unprofitable/Budget Neutral Subgroup", 3)), 
+  data.frame(Outcome = atts[c(2:16),c(1)], Estimate = atts[c(2:16),c(2)], CI = paste("(", atts[c(2:16),3], ", ", atts[c(2:16),4], ")", sep = ""), p.value =  c(2*pnorm(-abs(as.numeric(atts[c(2:16),2]) / ((as.numeric(atts[c(2:16),4]) - as.numeric(atts[c(2:16),3])) / (2 * 1.96)))))))      %>% 
+     arrange(p.value) %>%  
+    mutate(rank = row_number(), 
+           rank / 14 * 0.1) %>% 
+
+  kable("html", booktabs = T, col.names = c("Sample","Outcome", "Estimate", "95% CI", "p-value", "Rank", "BH-procedure Threshold")) %>%
+  kable_styling(latex_options = c("striped")) %>% 
+  row_spec(c(1:6), italic = T, hline_after = T, background = "lightgrey")
+  
+
+
+
+# parallel trends
+if (k == 1){z.larger <- z[-1,]} else {z.smaller <- z[-1,]}
+
+# length(z.larger)
+# length(z.smaller)
+cbind(atts[c(2:16),1], z[c(2:16),2])
+cbind(atts[atts[,1] %in% c('Total revenue (unrestricted & restricted)','Total net assets','Staffing', 'Liabilities'),1], z[atts[,1] %in% c('Total revenue (unrestricted & restricted)','Total net assets','Staffing', 'Liabilities'),2])
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## What's happening in the control? Let's think
+
+```{r}
+
+df.space <- df.qual.exp %>% 
+  filter(Att > 0) %>% 
+  select(`Grant Number`, Year) %>% 
+  unique() %>% 
+  left_join(uds.sites %>% select(`Grant Number`, Year, Zip), by = c("Grant Number","Year")) %>% 
+  left_join(clinics.in.zips, by = c("Zip","Year")) %>% 
+  
+#  filter(`Grant Number` == "H80CS00881")
+  group_by(Zip) %>% 
+  filter(max(Clinics) > 1) %>% 
+  unique() %>% 
+  left_join(uds.sites %>% select(`Grant Number`, Zip, Year), by = c("Zip","Year")) %>% 
+  rename(Incumbent = `Grant Number.x`, Competitor = `Grant Number.y`) %>% 
+  filter(Incumbent != Competitor) %>% 
+  group_by(Zip, Incumbent, Competitor) %>% 
+  summarise(YearFirstComp = min(Year))%>% 
+  arrange(Incumbent)
+
+#df.space %>%  filter(Incumbent == "H80CS00881")
+
+
+df.z.2 <- df.space %>% 
+  pivot_longer(Incumbent:Competitor) %>% 
+  left_join(uds.zip.totals, by = c("value" = "Grant Number")) %>% 
+    ungroup() %>% 
+  mutate(ID = as.numeric(as.factor(paste(Zip, name, value)))) %>% 
+  mutate(year.rel = `Reporting Year` - YearFirstComp, 
+         Treat = ifelse(name == "Incumbent", 1, 0), 
+         Post = ifelse(year.rel >= 0, 1, 0))
+
+df.z.2$year.rel <- relevel(as.factor(df.z.2$year.rel), ref = "-1")
+
+
+# Are incumbents and controls really that different?  not really
+df.z.2 %>% 
+  select(value, name, `Reporting Year`, None:Total) %>% 
+  unique() %>% 
+  left_join(uds.covariates, by = c("value" = "Grant Number", "Reporting Year" = "Year")) %>% 
+  left_join(uds.6b.rates, by = c("value" = "GrantNumber", "Reporting Year" = "Year")) %>% 
+  filter(`Reporting Year` == 2015) %>% 
+  filter(value != 'H80CS28975') %>% 
+  select(name, Total, None:Pct.Children, IMM2yo:DepScrn) %>% 
+  mutate(None = None / Total, 
+         MCD = MCD / Total, 
+         MCR = MCR / Total, 
+         COM = COM / Total) %>% 
+  tbl_summary(by = name, 
+              statistic = all_continuous() ~ "{mean} ({sd})") %>% 
+  add_p(test = everything() ~ "t.test")
+
+
+summary(lm(data = df.z.2, Total ~ Treat*year.rel))
+
+
+
+# Competitors in the competative zip
+
+df.space %>% 
+  left_join(df.qual.exp %>% select(`Grant Number`, Att), by = c("Incumbent" = "Grant Number")) %>% 
+  left_join(uds.zip, by = c("Zip" = "Zip Code","Competitor" = "Grant Number")) %>% 
+  filter(`Reporting Year` %in% c(2015:2019)) %>% 
+  mutate(year.rel = `Reporting Year` - Att, 
+         Tx = ifelse(`Reporting Year` - Att >= 0 , 1, 0)) %>% 
+  ggplot(aes(x = year.rel, y = `Total Number of Patients`, group = Tx)) + geom_point() + geom_smooth(method = "lm") #+ ylim(0, 2000)
+
+
+
+df.space1 <- df.space %>% 
+  left_join(df.qual.exp %>% select(`Grant Number`, ID, Att) %>% unique(), by = c("Incumbent" = "Grant Number")) %>% 
+  merge(2015:2019) %>% 
+  left_join(uds.zip, by = c("Zip" = "Zip Code","Competitor" = "Grant Number", "y" = "Reporting Year")) %>% 
+  #filter(y %in% c(2015:2019)) %>% 
+  mutate(year.rel = y- Att, 
+         Tx = ifelse(year.rel >= 0 , 1, 0)) %>% 
+  mutate(None.z = ifelse(is.na(`None_Uninsured Patients`), 0, `None_Uninsured Patients`),
+          MCR.z = ifelse(is.na(`Medicare Patients`), 0, `Medicare Patients`),
+          COM.z = ifelse(is.na(`Private Patients`), 0, `Private Patients`),
+          MCD.z = ifelse(is.na(`Medicaid_CHIP_Other Public Patients`), 0, `Medicaid_CHIP_Other Public Patients`),
+          Total.z = ifelse(is.na(`Total Number of Patients`), 0, `Total Number of Patients`),
+         Grant = Competitor) %>% 
+  rename(Year = y) %>% 
+  select(Grant, Zip, ID, Att, Year, None.z:Total.z) %>% 
+  arrange(Grant, Zip, Year) %>% 
+  rbind(df.spill %>% 
+  filter(Att == 0) %>% 
+  rename(Grant = `Grant Number`) %>% 
+  select(Grant, Zip, ID, Att, Year, None.z, MCR.z, COM.z, MCD.z, Total.z) %>% 
+    inner_join(df.spill2 %>% filter(Dist == 0) %>% select(`Grant Number`) %>% unique(), by = c("Grant" = "Grant Number"))) %>% 
+  mutate(Tx = ifelse(Att > 0 & Year >= Att, 1, 0))
+
+
+feols(data = df.space1, Total.z ~ Tx | Zip + Year, cluster = ~Zip)
+
+cs.output.expand <- att_gt( yname = "Total.z",
+                      tname = "Year",
+                      idname = "ID",
+                      gname = "Att",
+                      xformla = ~1,
+                      data = df.space1, # %>% filter(Year > 2015),
+                      control_group = "nevertreated",
+                      clustervars = "ID",
+                      panel = TRUE,
+                      base_period = "universal"
+                      )
+aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
+```
+
+
+## Change in Full Market Benefit
+```{r}
+
+
+df.z.dist.plot %>% 
+  left_join(uds.zip %>% select(`Grant Number`, `Reporting Year`, `Zip Code`, `Medicaid_CHIP_Other Public Patients`, `Total Number of Patients`), 
+            by = c("Grant Number.y" = "Grant Number", "Zip" = "Zip Code")) %>% 
+  left_join(uds.zip %>% select(`Grant Number`, `Reporting Year`, `Zip Code`, `Medicaid_CHIP_Other Public Patients`, `Total Number of Patients`), 
+            by = c("Grant Number.x" = "Grant Number", "Zip" = "Zip Code", "Reporting Year")) %>% 
+  rename(MCD.Rival = `Medicaid_CHIP_Other Public Patients.y`, 
+         Total.Rival = `Total Number of Patients.y`, 
+         MCD.Incumbent = `Medicaid_CHIP_Other Public Patients.x`, 
+         Total.Incumbent = `Total Number of Patients.x`) %>% 
+  left_join(uds.6b.rates %>% 
+            mutate(Quality.Incumbent = (IMM2yo + Pap + ChildBMI + AdultBMI + Tobac + CRC + DepScrn) / 7) %>% 
+            select(GrantNumber, Year, Quality.Incumbent), by = c("Grant Number.y" = "GrantNumber", "Reporting Year" = "Year")) %>% 
+  left_join(uds.6b.rates %>% 
+            mutate(Quality.Rival = (IMM2yo + Pap + ChildBMI + AdultBMI + Tobac + CRC + DepScrn) / 7) %>% 
+            select(GrantNumber, Year, Quality.Rival), by = c("Grant Number.x" = "GrantNumber", "Reporting Year" = "Year")) %>% 
+  mutate(YearDiff = `Reporting Year` - Year, 
+         Post = ifelse(YearDiff >= 0, 1, 0)) %>% 
+  filter(`Reporting Year` %in% c(2015:2019)) %>% 
+  select(Zip, Att.z, `Grant Number.x`, `Grant Number.y`, `Reporting Year`:Post) %>% 
+  mutate(Quality.Market = Total.Incumbent / (Total.Incumbent + Total.Rival) * Quality.Incumbent + Total.Rival / (Total.Incumbent + Total.Rival) * Quality.Rival) %>% 
+  group_by(Post) %>% 
+  summarise(mean(Quality.Market, na.rm = TRUE))
+
+
+```
+
+
