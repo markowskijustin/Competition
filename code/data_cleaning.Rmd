@@ -106,7 +106,7 @@ theme_tufte_revised <- function(base_size = 11, base_family = base_font_family_t
 ```{r}
 
 ## Zips
-locs <- paste("UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
+locs <- paste("//Users/jhm65/Dropbox/Git/UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
 uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes") 
 
 new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
@@ -174,7 +174,7 @@ uds.zip <- uds.zip[uds.zip$`Zip Code Type` == "ZipCode",]
 
 
 ## Sites
-locs <- paste("UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
+locs <- paste("//Users/jhm65/Dropbox/Git/UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
 
 uds.sites <- read_excel(locs[1], sheet = "HealthCenterSiteInfo") %>% 
   select(GrantNumber, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
@@ -257,7 +257,7 @@ uds.sites <- uds.sites.temp
 
 uds.sites.temp %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
 
-chc <- read.csv("chc.csv")
+chc <- read.csv("//Users/jhm65/Dropbox/Git/Competition/data_raw/chc.csv")
 
 chc %>% filter(Health.Center.Number %in% c("H80CS00881"))
 
@@ -313,19 +313,19 @@ uds.sites %>%
 ```{r}
 
 
-uds.6b.2012 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2013 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
-uds.6b.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 1) 
-uds.6b.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 1) 
+uds.6b.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
-uds.6b.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
-uds.6b.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
 
 # rbind(
@@ -432,23 +432,23 @@ uds.6b.rates[,c(3:9)] <- uds.6b.rates[,c(3:9)]
 ## Read in Technology Data
 ```{r}
 
-uds.HIT.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 0) %>% 
+uds.HIT.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 0) %>% 
   select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
-uds.HIT.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 2) %>% 
+uds.HIT.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "EHRInformation", skip = 2) %>% 
   select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
-uds.HIT.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
-  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
-
-uds.HIT.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
-  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
-uds.HIT.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
-  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
-uds.HIT.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+uds.HIT.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
   select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
 
-uds.HIT.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>%
+uds.HIT.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+uds.HIT.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>% 
+  select(GrantNumber, Tehr_L1b_Ca, Tehr_L2_Ca,	Tehr_L3_Ca, Tehr_L4_Ca, Tehr_L5_Ca, Tehr_L7_Ca)
+
+uds.HIT.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "HITInformation", skip = 1) %>%
   select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)
-uds.HIT.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "HITInformation", skip = 0) %>%
+uds.HIT.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "HITInformation", skip = 0) %>%
   select(GrantNumber, Tehr_L1b_Ca, Tehr_L4_Ca, Tehr_L7_Ca)
 
 uds.HIT.2020 <- data.frame(GrantNumber = uds.HIT.2020[,1], Tehr_L1b_Ca = uds.HIT.2020[,2], Tehr_L2_Ca = NA,	Tehr_L3_Ca = NA, Tehr_L4_Ca = uds.HIT.2020[,3], Tehr_L5_Ca = NA, Tehr_L7_Ca = uds.HIT.2020[,4])
@@ -517,16 +517,16 @@ uds.HIT[uds.HIT$UDSQualRep.levels == 0 & !is.na(uds.HIT$UDSQualRep.levels) & is.
 ## Read in Covariates
 ```{r}
 # Table 3B
-uds.3B.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
-uds.3B.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table3B", skip = 2) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
-uds.3B.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table3B", skip = 2) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
 
-uds.3B.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
-uds.3B.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
-uds.3B.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
 
-uds.3B.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
-uds.3B.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
 
 namevec <- c("Year", "Grant Number", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLang")
 uds.3B <- rbind(cbind(Year = 2014, uds.3B.2014),
@@ -545,16 +545,16 @@ uds.3B <- rbind(cbind(Year = 2014, uds.3B.2014),
 
 
 # Table 4
-uds.4.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
-uds.4.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table4", skip = 2) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
-uds.4.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table4", skip = 2) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
 
-uds.4.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
-uds.4.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
-uds.4.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
 
-uds.4.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
-uds.4.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
+uds.4.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L12_Ca, T4_L12_Cb) 
 
 namevec <- c("Year", "Grant Number", "<100%", "101-150%", "151-200%", ">200%", "Unknown", "FarmWorker", "Homeless", "0-17yo", "18+yo")
 uds.4 <- rbind(cbind(Year = 2014, uds.4.2014),
@@ -605,16 +605,16 @@ uds.covariates <-  uds.covariates %>%
 
 ## Read in Clinical Outcomes
 ```{r}
-uds.7.2014 <- read_excel("UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
-uds.7.2015 <- read_excel("UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table7_1", skip = 2) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
-uds.7.2016 <- read_excel("UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table7_1", skip = 2) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
 
-uds.7.2017 <- read_excel("UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
-uds.7.2018 <- read_excel("UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
-uds.7.2019 <- read_excel("UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
 
-uds.7.2020 <- read_excel("UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
-uds.7.2021 <- read_excel("UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table7_1", skip = 1) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
+uds.7.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table7_1", skip = 0) %>% select(GrantNumber, T7_Li_C1a, T7_Li_C1b,	T7_Li_C1c,	T7_Li_C1d, T7_Li_C2a,	T7_Li_C2b,	T7_Li_C2c) 
 
 namevec <- c("Year", "Grant Number", "TotalDeliveries", "BirthsLT1500","Births1500to2499","BirthsGTE2500","TotalHTN","Sample","Controlcount")
 uds.7 <- rbind(cbind(Year = 2014, uds.7.2014),
@@ -781,8 +781,8 @@ nrow(chc.finances[chc.finances$`Unrestricted surplus (deficit) after depreciatio
 
 ## Read in my termination crosswalk to filter out closures
 ```{r}
-chc.term <- read.csv("CHC_termination_crosswalk.csv")
-staffing <- read.csv("/Users/jhm65/Research/CHC Costs/FQHC_Staffing.csv")
+chc.term <- read.csv("//Users/jhm65/Dropbox/Git/Competition/data_raw/CHC_termination_crosswalk.csv")
+staffing <- read.csv("//Users/jhm65/Dropbox/Git/Data/FQHC_Staffing.csv")
 ```
 
 ## Read in census data for all zip codes
