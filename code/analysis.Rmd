@@ -894,6 +894,11 @@ f3.p.totals.full
 
 
 ## Figure 4 - Split by profitability
+
+
+
+
+
 ```{r}
 
 df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>% 
@@ -1593,7 +1598,7 @@ df.z.dist <- df.z.full %>%
   filter(`Grant Number.x` != `Grant Number.y`)
 
 ## Read in Centroid Data
-zip.centroids <- read.csv("ZIP_Code_Population_Weighted_Centroids.csv") %>% 
+zip.centroids <- read.csv("//Users/jhm65/Dropbox/Git/Data/ZIP_Code_Population_Weighted_Centroids.csv") %>% 
   mutate(ZipCode = str_pad(STD_ZIP5, 5, pad = "0")) %>% 
   select(ZipCode, X, Y)
 ## Add missing centroids
@@ -2278,7 +2283,7 @@ aggte(cs.output.expand, type = "dynamic", na.rm = TRUE)
 ```
 
 
-## Change in Full Market Benefit
+## Change in Full Market Benefit - CAreful this is not great
 ```{r}
 
 

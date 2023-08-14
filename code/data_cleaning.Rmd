@@ -1079,7 +1079,7 @@ cnames <- colnames(df.qual.exp)
 
 
 
-compare <- read.csv("comeptition.data.final.csv")[,-1]
+compare <- read.csv("//Users/jhm65/Dropbox/Git/Competition/data_processed/comeptition.data.final.csv")[,-1]
 colnames(compare) <- cnames
 
 # df.qual.exp <- compare
