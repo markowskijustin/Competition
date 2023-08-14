@@ -1090,7 +1090,8 @@ colnames(compare) <- cnames
 #   select(`Grant Number`:Altmans.Z) %>%
 #   rename(value = value.x)
 
-df.qual.exp <- df.qual.exp %>% rbind(compare %>% filter(`Grant Number` %in% c("H80CS00765","H80CS00881","H80CS02323") & Year %in% unique(df.qual.exp$Year) )) %>% 
+df.qual.exp <- df.qual.exp %>% rbind(compare %>% 
+                                       filter(`Grant Number` %in% c("H80CS00765","H80CS00881","H80CS02323") & Year %in% unique(df.qual.exp$Year) )) %>% 
   filter(`Grant Number` != "H80CS00225")
 
 

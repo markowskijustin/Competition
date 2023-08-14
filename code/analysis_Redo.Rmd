@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
+
 ```{r}
 
 
@@ -28,29 +29,29 @@ df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>%
   inner_join(df.qual.exp %>% filter(Year == 2016) %>% #mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% 
                select(`Grant Number`, ZipFilter, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("Grant Number")) %>% 
   select(Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z, Pct.HTN.CNTRL, Pct.NHA:Pct.Children, MCD, COM, MCR) %>% 
-  mutate(Tx = ifelse(Year >= Att, 1, 0), 
-         year.rel = Year - Att) %>% 
+  mutate(Tx = ifelse(Year >= Att & Att > 0, 1, 0)) %>% 
   unique() 
 
 #library(did2s)
 
 did2s(
-      data = df.sum %>% filter(ZipFilter == 1), 
-      yname = "Sites", 
+      data = df.sum ,#%>% filter(ZipFilter == 2), 
+      yname = "Altmans.Z", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
-        second_stage = ~ i(Tx, ref = FALSE),#i(year.rel, ref = -1),
+        second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = FALSE
     )
 
 
 
-out.qual <- event_study(data = df.sum %>% filter(ZipFilter == 1), 
-  yname = "Sites", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM)
+#select(ID, Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z) %>% left_join(df.qual.exp %>% select(ID, Year, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("ID","Year"))
+out.qual <- event_study(data = df.qual.exp,# %>% filter(ZipFilter == 2), 
+  yname = "Altmans.Z", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM)
 
 out.qual %>% 
-  filter(estimator %notin% c("Borusyak, Jaravel, Spiess (2021)","Callaway and Sant'Anna (2020)")) %>% 
+  filter(estimator %notin% c("Borusyak, Jaravel, Spiess (2021)")) %>% 
 filter(abs(term) <= 3) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
