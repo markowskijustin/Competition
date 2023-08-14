@@ -90,8 +90,6 @@ did2s(
     )
 
 
-
-
 did2s(
       data = df.sum %>% left_join(df.spill2 %>% 
   group_by(`Grant Number`, Year) %>% 
@@ -110,7 +108,7 @@ did2s(
 
 
 did2s(
-      data = df.sum %>% inner_join(df.z.dist %>% select(`Grant Number.y`, DistToClosestSite), by = c("Grant Number" = "Grant Number.y")) %>% filter(is.na(DistToClosestSite) | DistToClosestSite < 5),
+      data = df.sum %>% left_join(df.z.dist %>% select(`Grant Number.y`, DistToClosestSite), by = c("Grant Number" = "Grant Number.y")) %>% filter(is.na(DistToClosestSite) | DistToClosestSite > 5),
       yname = "Qcomp", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
@@ -119,5 +117,28 @@ did2s(
       verbose = FALSE
     )
 
+
+set.seed(345)
+did2s(
+      data = df.sum %>% left_join(df.z.dist %>% select(`Grant Number.y`, DistToClosestSite), by = c("Grant Number" = "Grant Number.y")) %>% 
+        group_by(ID) %>% 
+  mutate(DistToClosestSite = ifelse(is.na(DistToClosestSite), sample(size = 1, df.z.dist$DistToClosestSite, replace = T), DistToClosestSite)),
+      yname = "NewQuality", 
+      treatment = "Tx",
+        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(DistToClosestSite / 1) + I(Tx *as.numeric(DistToClosestSite / 1)),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+
+
+
 ```
+
+
+
+
+
+
+
 
