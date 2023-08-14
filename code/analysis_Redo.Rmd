@@ -36,8 +36,8 @@ df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>%
 #library(did2s)
 
 did2s(
-      data = df.sum ,#%>% filter(ZipFilter == 2), 
-      yname = "Sites", 
+      data = df.sum , 
+      yname = "Altmans.Z", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -46,8 +46,28 @@ did2s(
     )
 
 
+#select(ID, Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z) %>% left_join(df.qual.exp %>% select(ID, Year, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("ID","Year"))
+out.qual <- event_study(data = df.qual.exp %>% filter(ZipFilter == 1), 
+  yname = "Altmans.Z", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM)
+
+out.qual %>% 
+  filter(estimator %notin% c("Borusyak, Jaravel, Spiess (2021)")) %>% 
+filter(abs(term) <= 3) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) 
+
+```
 
 
+
+
+
+## Variations
+
+
+```{r}
 
 
 did2s(
@@ -60,7 +80,7 @@ did2s(
   pivot_wider(id_cols = `Grant Number`, names_from = Year, values_from = avgdist) %>% 
   mutate(ds = `2019` - `2015`) %>% 
     ungroup() %>% 
-    mutate(filt = ifelse(ds > quantile(ds, 0.5, na.rm = TRUE), 1, 0)), by = c("Grant Number")) %>% filter(filt == 1),#%>% filter(ZipFilter == 2), 
+    mutate(filt = ifelse(ds > median(ds, na.rm = TRUE), 1, 0)), by = c("Grant Number")) %>% filter(filt == 0),#%>% filter(ZipFilter == 2), 
       yname = "NewQuality", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
@@ -77,8 +97,9 @@ did2s(
   group_by(`Grant Number`, Year) %>% 
   summarise(num = sum((Dist + 1) * Sites), 
          denom = sum(Sites), 
-         avgdist = num / denom), by = c("Grant Number","Year")) ,#%>% filter(ZipFilter == 2), 
-      yname = "Altmans.Z", 
+         avgdist = num / denom) %>% 
+    filter(Year == 2016) %>% select(`Grant Number`, avgdist), by = c("Grant Number")) ,#%>% filter(ZipFilter == 2), 
+      yname = "NewQuality", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
         second_stage = ~ i(Tx, ref = FALSE) + as.numeric(avgdist / 10) + I(Tx *as.numeric(avgdist / 10)),
@@ -88,18 +109,5 @@ did2s(
 
 
 
-
-
-#select(ID, Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z) %>% left_join(df.qual.exp %>% select(ID, Year, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("ID","Year"))
-out.qual <- event_study(data = df.qual.exp,# %>% filter(ZipFilter == 2), 
-  yname = "Altmans.Z", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM)
-
-out.qual %>% 
-  filter(estimator %notin% c("Borusyak, Jaravel, Spiess (2021)")) %>% 
-filter(abs(term) <= 3) %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) 
-
 ```
+
