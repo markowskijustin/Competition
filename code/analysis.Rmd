@@ -1925,10 +1925,11 @@ parallel.trends.set
 ## Again, with did2s
 ```{r}
 did2s(
-      data = df.spill2 , 
-      yname = "Total.Hours", 
+      data = df.spill2 %>% inner_join(df.qual.exp %>% filter(Year == 2016) %>% #mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% 
+               select(`Grant Number`, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("Grant Number")), 
+      yname = "Total.z", 
       treatment = "Tx",
-        first_stage = ~ 0 | Zip + Year + D, 
+        first_stage = ~ 0 | Zip + Year + D + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
         second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10)),
         cluster_var = "Zip",
       verbose = FALSE

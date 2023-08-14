@@ -22,27 +22,71 @@ df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>%
   #rename(`Grant Number` = Grant.Number, `Surplus as a pct of before dep expenses` = Surplus.as.a.pct.of.after.dep.expenses) %>% 
   #filter(MarketShare < 0.4) %>%  #median(MarketShare, na.rm = TRUE) - 0.25
   #inner_join(df.qual.exp %>% filter(Year == 2015 & Total < 15000) %>% select(`Grant Number`), by = c("Grant Number")) %>%  #& Zips < 1.75 or 7.75
-  select(`Grant Number`, Year, ID, Att, Sites, Qcomp, Altmans.Z, Pct.HTN.CNTRL) %>%
+  select(`Grant Number`, Year, ID, Att, Sites, Qcomp, Altmans.Z, Pct.HTN.CNTRL, Total, IMM2yo:DepScrn) %>%
   # inner_join(df.qual.exp %>% filter(Year == 2015) %>%
   #                                           mutate(ZipFilter = ifelse(Total < 12000, 1,
   #                                                              ifelse(Total > 12000, 2, NA))) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>%
   inner_join(df.qual.exp %>% filter(Year == 2016) %>% #mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% 
                select(`Grant Number`, ZipFilter, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("Grant Number")) %>% 
-  select(Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z, Pct.HTN.CNTRL, Pct.NHA:Pct.Children, MCD, COM, MCR) %>% 
+  select(`Grant Number`, Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z, Pct.HTN.CNTRL, Pct.NHA:Pct.Children, MCD, COM, MCR, Total, IMM2yo:DepScrn) %>% 
   mutate(Tx = ifelse(Year >= Att & Att > 0, 1, 0)) %>% 
-  unique() 
+  unique() %>% 
+  mutate(NewQuality = (CRC + ChildBMI + AdultBMI + Tobac + DepScrn) / 5)
 
 #library(did2s)
 
 did2s(
       data = df.sum ,#%>% filter(ZipFilter == 2), 
-      yname = "Altmans.Z", 
+      yname = "Sites", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
         second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = FALSE
     )
+
+
+
+
+
+
+did2s(
+      data = df.sum %>% left_join(df.spill2 %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(num = sum((Dist + 1) * Sites), 
+         denom = sum(Sites), 
+         avgdist = num / denom) %>% 
+  filter(Year %in% c(2015, 2019)) %>% 
+  pivot_wider(id_cols = `Grant Number`, names_from = Year, values_from = avgdist) %>% 
+  mutate(ds = `2019` - `2015`) %>% 
+    ungroup() %>% 
+    mutate(filt = ifelse(ds > quantile(ds, 0.5, na.rm = TRUE), 1, 0)), by = c("Grant Number")) %>% filter(filt == 1),#%>% filter(ZipFilter == 2), 
+      yname = "NewQuality", 
+      treatment = "Tx",
+        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+
+
+
+
+did2s(
+      data = df.sum %>% left_join(df.spill2 %>% 
+  group_by(`Grant Number`, Year) %>% 
+  summarise(num = sum((Dist + 1) * Sites), 
+         denom = sum(Sites), 
+         avgdist = num / denom), by = c("Grant Number","Year")) ,#%>% filter(ZipFilter == 2), 
+      yname = "Altmans.Z", 
+      treatment = "Tx",
+        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(avgdist / 10) + I(Tx *as.numeric(avgdist / 10)),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+
+
 
 
 

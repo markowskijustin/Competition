@@ -29,6 +29,7 @@ library(cowplot)
 library(Matching)
 library(fixest)
 library(directlabels)
+library(did2s)
 
 `%notin%` <- Negate(`%in%`)
 
