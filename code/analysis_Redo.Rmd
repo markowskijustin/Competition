@@ -36,8 +36,8 @@ df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>%
 #library(did2s)
 
 did2s(
-      data = df.sum , 
-      yname = "Altmans.Z", 
+      data = df.sum %>% inner_join(df.qual.exp %>% filter(MarketShare > 1) %>% select(`Grant Number`) %>% unique(), by = c("Grant Number")), 
+      yname = "Qcomp", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -80,7 +80,7 @@ did2s(
   pivot_wider(id_cols = `Grant Number`, names_from = Year, values_from = avgdist) %>% 
   mutate(ds = `2019` - `2015`) %>% 
     ungroup() %>% 
-    mutate(filt = ifelse(ds > median(ds, na.rm = TRUE), 1, 0)), by = c("Grant Number")) %>% filter(filt == 0),#%>% filter(ZipFilter == 2), 
+    mutate(filt = ifelse(ds > median(ds, na.rm = TRUE), 1, 0)), by = c("Grant Number")) %>% filter(ds < 1),#%>% filter(ZipFilter == 2), 
       yname = "NewQuality", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
@@ -97,8 +97,7 @@ did2s(
   group_by(`Grant Number`, Year) %>% 
   summarise(num = sum((Dist + 1) * Sites), 
          denom = sum(Sites), 
-         avgdist = num / denom) %>% 
-    filter(Year == 2016) %>% select(`Grant Number`, avgdist), by = c("Grant Number")) ,#%>% filter(ZipFilter == 2), 
+         avgdist = num / denom) , by = c("Grant Number","Year")) ,#%>% filter(ZipFilter == 2), 
       yname = "NewQuality", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
@@ -108,6 +107,17 @@ did2s(
     )
 
 
+
+
+did2s(
+      data = df.sum %>% inner_join(df.z.dist %>% select(`Grant Number.y`, DistToClosestSite), by = c("Grant Number" = "Grant Number.y")) %>% filter(is.na(DistToClosestSite) | DistToClosestSite < 5),
+      yname = "Qcomp", 
+      treatment = "Tx",
+        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
+        second_stage = ~ i(Tx, ref = FALSE) ,
+        cluster_var = "ID",
+      verbose = FALSE
+    )
 
 ```
 
