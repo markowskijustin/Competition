@@ -983,7 +983,7 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   group_by(`BHCMIS ID`, Year) %>% 
   summarise(Clinics = max(Clinics)) %>% 
   pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
-  filter(`2010` == 1 & `2011` == 1 & `2012` == 1) %>%   
+  filter(`2010` == 1 & `2011` == 1 ) %>%   
   #filter(`2014` == 1 & `2015` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
