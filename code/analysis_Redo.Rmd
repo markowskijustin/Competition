@@ -138,6 +138,16 @@ did2s(
 
 
 
+# Redo the analysis
+
+```{r}
+
+
+df.comp
+
+uds.sites.full
+
+```
 
 
 
