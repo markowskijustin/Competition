@@ -832,13 +832,38 @@ names(fins.revenue.expenses) <- gsub("^X\\.", "", names(fins.revenue.expenses))
 names(fins.revenue.expenses) <- gsub("\\.\\.", "", names(fins.revenue.expenses))
 
 staffing <- read.csv("/Users/jhm65/Dropbox/Git/Data/FQHC_Staffing.csv")
-
+assliabs <- read.csv("/Users/jhm65/Dropbox/Git/Data/FQHC_Assets_and_Liabilities.csv")
 
 fins.revenue.expenses <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID) %>% 
   left_join(cw, by = c("ModernGranteeID" = "Grant Number")) %>% 
   left_join(fins.revenue.expenses, by = c("EIN" = "EIN")) %>% 
   select(ModernGranteeID:EIN, form_year:fringe_rate) %>% 
-  left_join(staffing %>% select(EIN:Staff), by = c("EIN","form_year" = "Year"))
+  left_join(staffing %>% select(EIN:Staff), by = c("EIN","form_year" = "Year")) 
+
+
+
+## Fixing some dumb mistake
+
+# fixing.cw <- cbind(NewEINs = EINs[c(1:21, 23:323, 325:499, 501:617, 619:669, 671:738,  740:782, 784:790, 792:819, 821:989, 991:1106, 1108:1184, 1186)], 
+#       assliabs %>% 
+#   mutate(ch = Year - lag(Year)) %>% 
+#   filter(is.na(ch) | ch < 0)) %>% 
+#   mutate(Y = lead(X) - 1) %>% 
+#   select(EIN, NewEINs, X, Y)
+# 
+# 
+# for (k in 1:max(assliabs$X)){
+#   assliabs[k,]$EIN <- assliabs[k,] %>% 
+#     left_join(fixing.cw, by = c("EIN")) %>% 
+#     filter(X.x >= X.y & X.x <= Y) %>% 
+#     select(NewEINs) %>% 
+#     unlist()
+# }
+
+fins.revenue.expenses <- fins.revenue.expenses %>% 
+  left_join(assliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) 
+
+
 ```
 
 
@@ -909,7 +934,7 @@ df.comp <- df.comp %>%
   filter(Year %in% included.years) %>% 
   mutate(year.rel = as.factor(ifelse(att.random > 0, Year - att.random, NA)), 
          Treatment = ifelse(att > 0, 1, 0)) %>% 
-  select(BHCMISID:STATE, Name:ID, ACA:Treatment, Total:dm.total, fs_contributions:Staff) 
+  select(BHCMISID:STATE, Name:ID, ACA:Treatment, Total:dm.total, fs_contributions:Liabilities) 
 
 df.comp <- df.comp %>% 
   left_join(df.comp %>% 

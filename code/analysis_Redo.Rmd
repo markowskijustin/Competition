@@ -179,7 +179,7 @@ dfc %>%
 
 Splits
 - Total at 10000 and at 25000
-- ngla_net_gain_loss/ngla_revenue at 0.03
+- ngla_net_gain_loss/ngla_revenue at 0.03 (Profitable grow and give up financial footing, unprofitable improve quality)
 - Months of cash at 2
 
 Significant Variables
@@ -197,16 +197,18 @@ summary(dfc[dfc$Year == 2010,]$ngla_net_gain_loss / dfc[dfc$Year == 2010,]$ngla_
 
 did2s(
       data = dfc %>% 
-        select(ID, Year, Tx, STATE, Sites, htn.rate, dm.rate, imm.rate, crc.rate, pap.rate, childbmi.rate, adultbmi.rate, ivd.rate, cad.rate, asthma.rate, Total, ngla_net_gain_loss, ngla_revenue, ngla_expense, Staff, months_of_cash, quick_ratio, fringe_rate) %>% 
+        select(ID, Year, Tx, STATE, Sites, htn.rate, dm.rate, imm.rate, crc.rate, pap.rate, childbmi.rate, adultbmi.rate, ivd.rate, cad.rate, asthma.rate, Total, ngla_net_gain_loss, ngla_revenue, ngla_expense, Staff, months_of_cash, quick_ratio, fringe_rate, Assets, Liabilities) %>% 
         mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6, 
                CostPerPat = ngla_expense / Total, 
                months_of_cash = as.numeric(months_of_cash),
-               quick_ratio = as.numeric(quick_ratio),
-               fringe_rate = as.numeric(fringe_rate), 
-               profit_ratio = Sites) %>% 
-        inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue > 0.03) #& ngla_net_gain_loss/ngla_revenue < 0.03) 
+               Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_net_gain_loss / Assets, 
+               Efficiency = ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities, 
+               Altman = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% 
+        inner_join(dfc %>% filter(Year == 2010 ) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
                    %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
-      yname = "Sites", 
+      yname = "Qcomp", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None, 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -216,9 +218,9 @@ did2s(
 
 
 event_study(data = dfc %>% mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate) / 6) %>% 
-              inner_join(dfc %>% filter(Year == 2010 & Total < 10000)# ngla_net_gain_loss/ngla_revenue < 0.03 as.numeric(months_of_cash) < 2)#Total > 10000) 
+              inner_join(dfc %>% filter(Year == 2010 & Total > 10000)# ngla_net_gain_loss/ngla_revenue < 0.03 as.numeric(months_of_cash) < 2)#Total > 10000) 
                    %>% select(ID) %>% unique() , by = c("ID")), 
-  yname = "as.numeric(quick_ratio)", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None) %>% 
+  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None) %>% 
   filter(abs(term) <= 5) %>% 
   #filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
