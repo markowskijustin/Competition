@@ -140,12 +140,29 @@ did2s(
 
 # Redo the analysis
 
+## Balance between treated and controls
+```{r}
+
+dfc %>% 
+  filter(Year == 2010) %>% 
+  mutate(Treat = ifelse(Att > 0, "Treated", "Control")) %>% 
+  select(Treat, Total, Pct.NHA:Pct.COM) %>% 
+  filter(complete.cases(.)) %>% 
+  tbl_summary(by = Treat) %>% 
+  add_p()
+
+```
+
+
+
+## Overall Effects on Key Variables
+
 ```{r}
 
 
 did2s(
       data = dfc %>% 
-        select(ID, Year, Tx, Sites, htn.rate, dm.rate, imm.rate, crc.rate, pap.rate, childbmi.rate, adultbmi.rate, ivd.rate, cad.rate, asthma.rate, Total, ngla_net_gain_loss, ngla_revenue, ngla_expense, Staff, months_of_cash, quick_ratio, fringe_rate, closed) %>% 
+        select(ID, Year, Tx, STATE, Sites, htn.rate, dm.rate, imm.rate, crc.rate, pap.rate, childbmi.rate, adultbmi.rate, ivd.rate, cad.rate, asthma.rate, Total, ngla_net_gain_loss, ngla_revenue, ngla_expense, Staff, months_of_cash, quick_ratio, fringe_rate) %>% 
         mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6, 
                CostPerPat = ngla_expense / Total, 
                months_of_cash = as.numeric(months_of_cash),
@@ -153,7 +170,7 @@ did2s(
                fringe_rate = as.numeric(fringe_rate)) %>% 
         inner_join(dfc %>% filter(Year == 2010) #& Total > 20000) 
                    %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
-      yname = "closed", 
+      yname = "Qcomp", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None, 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -163,9 +180,9 @@ did2s(
 
 
 event_study(data = dfc %>% mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate) / 6), 
-  yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None) %>% 
+  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None) %>% 
   filter(abs(term) <= 5) %>% 
-  filter(estimator == "Gardner (2021)") %>% 
+  #filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
