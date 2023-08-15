@@ -171,10 +171,11 @@ did2s(
                CostPerPat = ngla_expense / Total, 
                months_of_cash = as.numeric(months_of_cash),
                quick_ratio = as.numeric(quick_ratio),
-               fringe_rate = as.numeric(fringe_rate)) %>% 
-        inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue > 0.03) 
+               fringe_rate = as.numeric(fringe_rate), 
+               profit_ratio = Sites) %>% 
+        inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue < 0.03) 
                    %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
-      yname = "Qcomp", 
+      yname = "Total", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None, 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -184,7 +185,7 @@ did2s(
 
 
 event_study(data = dfc %>% mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate) / 6) %>% 
-              inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue > 0.03)#as.numeric(months_of_cash) < 2)#Total > 10000) 
+              inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue < 0.03)#as.numeric(months_of_cash) < 2)#Total > 10000) 
                    %>% select(ID) %>% unique() , by = c("ID")), 
   yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None) %>% 
   filter(abs(term) <= 5) %>% 
