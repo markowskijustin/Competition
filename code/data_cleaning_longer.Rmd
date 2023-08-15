@@ -94,6 +94,15 @@ theme_tufte_revised <- function(base_size = 11, base_family = base_font_family_t
 
 # Data Prep
 
+## Set study period
+```{r}
+
+included.years <- 2010:2021
+included.treat <- 2013:2021
+
+```
+
+
 ## Sites and ZipCodes
 ```{r}
 
@@ -227,6 +236,93 @@ uds.sites.full[grep(pattern = "-", uds.sites.full$Zip),]$Zip <- NA
 
 
 ```
+
+
+
+## Clean up the missing addresses, geocoding
+
+```{r}
+
+
+
+tbcoded <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
+coded <- geo(street = tbcoded[c(1:1000),]$`Site Street Address`, 
+             city = tbcoded[c(1:1000),]$`Site City`, 
+             state = tbcoded[c(1:1000),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE)
+
+for (g in 1:13){
+  g
+coded <- rbind(coded, 
+               geo(street = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site Street Address`, 
+             city = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site City`, 
+             state = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+}
+
+coded <- rbind(coded, 
+               geo(street = tbcoded[c(14001:14253),]$`Site Street Address`, 
+             city = tbcoded[c(14001:14253),]$`Site City`, 
+             state = tbcoded[c(14001:14253),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+
+
+coded[grep(pattern = "[[:digit:]]{5}$", coded$matched_address),]
+
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]$Zip <- str_extract(coded$matched_address, pattern = "[[:digit:]]{5}$")
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
+
+uds.sites.full.temp <- uds.sites.full
+
+```
+
+```{r}
+
+uds.sites.full <- uds.sites.full.temp
+
+uds.sites.full.temp %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
+
+chc <- read.csv("//Users/jhm65/Dropbox/Git/Competition/data_raw/chc.csv")
+
+chc %>% filter(Health.Center.Number %in% c("H80CS00881"))
+
+
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Street Address" = "Site.Address")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`BHCMIS ID`:Zip) %>%
+  unique()
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Name" = "Site.Name")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`BHCMIS ID`:Zip) %>%
+  unique()
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
+```
+
+```{r}
+
+
+table(uds.sites.full.temp$`Location Setting`)
+
+
+uds.sites.full <- uds.sites.full %>% #filter(`Location Type` == "Permanent" & `Location Setting` %in% c("All Other Clinic Types")) %>% 
+  mutate(Access = as.numeric(ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Full-Time", 40, 
+                  ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Part-Time", 10, `Total Weekly Hours Of Operation`))))
+
+uds.sites.full[is.na(uds.sites.full$Zip),] 
+
+uds.sites.full %>% 
+  arrange(`Total Weekly Hours Of Operation`, `Operational Schedule` )
+```
+
 
 
 
@@ -757,8 +853,6 @@ apm.history <- read_excel("/Users/jhm65/Dropbox/Git/APMs/data_raw/APM_History.xl
 
 ```{r}
 
-included.years <- 2010:2021
-included.treat <- 2013:2021
 
 ## Broader definitions 5 / 7 quality measures significant improvements overall
 # included.years <- 2009:2021
@@ -832,96 +926,13 @@ df.comp <- df.comp %>%
 ## Remove some weird shit in CT
 df.comp <- df.comp %>% 
   filter(BHCMISID != "01E00010") %>%  #%>%  filter(STATE != 'CT')
-select(BHCMISID:FIPS, ID, Total:Pct.COM, imm.rate:MinYear)
+select(BHCMISID:FIPS, Total:Pct.COM, imm.rate:MinYear)
 
 
 
 ```
 
 
-## Clean up the missing addresses, geocoding
-
-```{r}
-
-
-
-tbcoded <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
-coded <- geo(street = tbcoded[c(1:1000),]$`Site Street Address`, 
-             city = tbcoded[c(1:1000),]$`Site City`, 
-             state = tbcoded[c(1:1000),]$`Site State`, 
-             method = "census", 
-             full_results = TRUE)
-
-for (g in 1:13){
-  g
-coded <- rbind(coded, 
-               geo(street = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site Street Address`, 
-             city = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site City`, 
-             state = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site State`, 
-             method = "census", 
-             full_results = TRUE) )
-}
-
-coded <- rbind(coded, 
-               geo(street = tbcoded[c(14001:14253),]$`Site Street Address`, 
-             city = tbcoded[c(14001:14253),]$`Site City`, 
-             state = tbcoded[c(14001:14253),]$`Site State`, 
-             method = "census", 
-             full_results = TRUE) )
-
-
-coded[grep(pattern = "[[:digit:]]{5}$", coded$matched_address),]
-
-
-uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]$Zip <- str_extract(coded$matched_address, pattern = "[[:digit:]]{5}$")
-uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
-
-uds.sites.full.temp <- uds.sites.full
-
-```
-
-```{r}
-
-uds.sites.full <- uds.sites.full.temp
-
-uds.sites.full.temp %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
-
-chc <- read.csv("//Users/jhm65/Dropbox/Git/Competition/data_raw/chc.csv")
-
-chc %>% filter(Health.Center.Number %in% c("H80CS00881"))
-
-
-
-uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] %>%
-  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Street Address" = "Site.Address")) %>%
-  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
-  select(`BHCMIS ID`:Zip) %>%
-  unique()
-
-uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] %>%
-  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Name" = "Site.Name")) %>%
-  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
-  select(`BHCMIS ID`:Zip) %>%
-  unique()
-
-uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
-```
-
-```{r}
-
-
-table(uds.sites.full.temp$`Location Setting`)
-
-
-uds.sites.full <- uds.sites.full %>% #filter(`Location Type` == "Permanent" & `Location Setting` %in% c("All Other Clinic Types")) %>% 
-  mutate(Access = as.numeric(ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Full-Time", 40, 
-                  ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Part-Time", 10, `Total Weekly Hours Of Operation`))))
-
-uds.sites.full[is.na(uds.sites.full$Zip),] 
-
-uds.sites.full %>% 
-  arrange(`Total Weekly Hours Of Operation`, `Operational Schedule` )
-```
 
 
 ## Classify FQHCs into Treated, control based on zip codes
@@ -929,38 +940,101 @@ uds.sites.full %>%
 ```{r}
 
 
-sites.in.zips <- uds.sites.full %>% 
+clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   filter(Year >= included.years[1]) %>% 
-  group_by(`BHCMIS ID`, Zip, Year) %>% 
-  summarise(Counts = n()) %>% 
-  pivot_wider(id_cols = c(Zip, `BHCMIS ID`), names_from = Year, values_from = Counts) %>% 
-  pivot_longer(cols = `2010`:`2021`) %>% 
-  mutate(value = ifelse(is.na(value), 0, value)) %>% 
-  arrange(Zip, name)
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>%
+  arrange(desc(Clinics))
 
-clinics.in.zips <- uds.sites.full %>% 
+
+# Identify clinics in competitive zip codes
+clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
   filter(Year >= included.years[1]) %>%
   select(`BHCMIS ID`, Zip, Year) %>% 
   unique() %>% 
-  group_by(Zip, Year) %>% 
-  summarise(Counts = n()) %>% 
-  pivot_wider(id_cols = c(Zip), names_from = Year, values_from = Counts) %>% 
-  pivot_longer(cols = `2011`:`2017`) %>% 
-  mutate(value = ifelse(is.na(value), 0, value)) %>% 
-  arrange(Zip, name)
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`BHCMIS ID`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
+  filter(`2010` == 1 & `2011` == 1 & `2012` == 1) %>%   
+  #filter(`2014` == 1 & `2015` == 1) %>%  
+  #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
+  #filter(is.na(NewClinicID)) %>%
+  select(`BHCMIS ID`:`2021`) %>% 
+  pivot_longer(cols = c(`2010`:`2021`)) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  filter(min(value) == 1 ) %>% 
+  #filter(max(value) == last(value)) %>% 
+  mutate(Tx = ifelse(value > 1, 1, 0)) 
 
 
-sites.in.zips %>% 
-  left_join(clinics.in.zips, by = c("Zip","name"))%>% 
-  group_by(`Grant Number`, Year) %>% 
-  summarise(Clinics = max(Clinics)) 
+# Classify clinics by introduction of competition
+comp.initial <- clinics.comp %>%  #left_join(clinics.comp %>% mutate(Year = as.numeric(name)), uds.zip.totals, by = c("BHCMIS ID", "name" = "Reporting Year")) %>% 
+  mutate(Year = as.numeric(name)) %>% 
+  left_join(uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+              filter(Year >= included.years[1]) %>%
+  group_by(`BHCMIS ID`, Year) %>% 
+  summarise(Sites = n()), by = c("BHCMIS ID","Year")) %>% 
+  ungroup() %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att = min(ifelse(Tx == 0, 2, 1)*Year, na.rm = TRUE) ) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att = ifelse(Att < 2022, Att, 0)) %>% 
+  ungroup() %>% 
+  mutate(ID = as.numeric(factor(`BHCMIS ID`)))
+
+# Expandors vs Expandees
+comp.initial <- comp.initial %>% 
+  left_join(
+      left_join(comp.initial %>% select(`BHCMIS ID`, Att) %>% unique(), uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+                  filter(Year >= included.years[1]) %>%
+        select(`BHCMIS ID`, Zip, Year) %>% 
+        group_by(`BHCMIS ID`, Zip) %>% 
+        summarise(YearFirstInZip = min(Year)) %>% 
+        filter(YearFirstInZip %notin% c(2010)) %>% 
+        select(`BHCMIS ID`, YearFirstInZip) %>% 
+        unique(), by = c("BHCMIS ID")) %>% #filter(`BHCMIS ID` == "H80CS00101") %>% 
+        mutate(Expandor = ifelse(is.na(YearFirstInZip) | Att != YearFirstInZip, 0, 1)) %>%  #  is.na(YearFirstInZip) | Att != YearFirstInZip
+        group_by(`BHCMIS ID`) %>% summarise(Expandor = max(Expandor)), by = c("BHCMIS ID")) %>% filter(Expandor == 0)
+
+
+dfc <- comp.initial %>% 
+  left_join(df.comp, by = c("BHCMIS ID" = "BHCMISID", "Year"))
+```
+
+
+## Finalize the core set of measures
+```{r}
+
+dfc %>% 
+  mutate(Liabilities = `Liabilities (as pct of assets)` * `Total net assets`, 
+         Staffing = `Total expenses before depreciation` * Personnel, 
+         LBE.pct = `Gross land, buildings and equipment (LBE)` / `Total net assets`, 
+         `Liabilities (as pct of assets)` = `Liabilities (as pct of assets)` * 100, 
+         `Surplus as a pct of before dep expenses` = `Surplus as a pct of before dep expenses` * 100, 
+         Qcomp = (pap.rate + crc.rate + asthma.rate + cad.rate + ivd.rate + childbmi.rate + adultbmi.rate) / 7, 
+         CostOfCare = `Total expenses before depreciation` / Total) %>% 
+  
+  mutate(Liquidity =  `Total net assets` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         Profitability =  `Unrestricted surplus (deficit) before depreciation` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         Efficiency = (`Total revenue (unrestricted & restricted)` - `Total expenses before depreciation`) / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
+         NetWorth = (100 - `Liabilities (as pct of assets)`) / `Liabilities (as pct of assets)` / 100) %>% 
+  mutate(Altmans.Z = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% # 6.56, 3.26, 6.72, 1.05  OR 0.18, 0.3, 0.81, 0.14
+  mutate(Liquidity = ifelse(Liquidity == 'Inf', NA, Liquidity), 
+         Profitability = ifelse(Profitability == 'Inf', NA, Profitability), 
+         Efficiency = ifelse(Efficiency == 'Inf', NA, Efficiency), 
+         NetWorth = ifelse(NetWorth == 'Inf', NA, NetWorth), 
+         Altmans.Z = ifelse(Altmans.Z == 'Inf', NA, Altmans.Z))
+
+
+
 ```
 
 
 
 ## Write the file
 ```{r}
-#write_csv(df.comp, file = "/Users/jhm65/Dropbox/Projects/Competition/data_processed/analyticalfile.csv")
+#write_csv(dfc, file = "/Users/jhm65/Dropbox/Projects/Competition/data_processed/analyticalfile.csv")
 
 ```
 
