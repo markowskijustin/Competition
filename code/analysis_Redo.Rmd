@@ -158,14 +158,90 @@ dfc %>%
 
 ## Overall Effects on Key Variables
 
+
+
+## Broken down by components
 ```{r}
 
+df.core <- dfc %>% 
+  mutate(MCD = Total * Pct.MCD / 100, 
+         None = Total * Pct.None / 100, 
+         MCR = Total * Pct.MCR / 100, 
+         COM = Total * Pct.COM / 100, 
+         
+         crc.rate = crc.rate * 100, 
+         pap.rate = pap.rate * 100, 
+         childbmi.rate = childbmi.rate * 100, 
+         adultbmi.rate = adultbmi.rate * 100, 
+         htn.rate = htn.rate * 100, 
+         dm.rate = dm.rate * 100) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         MCD:COM, 
+         crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
+         Liquidity:NetWorth, 
+         Pct.NHA:Pct.COM) #%>%  mutate(Altman = ifelse(is.infinite(Altman), NA, Altman))#, #pap.rate:dm.total, Liquidity:Altman) 
+  
 
 
+
+did.core <- c(0, 0, 0, 0)
+
+for (j in 10:23){
+  
+  df.temp <- df.core[,c(1:9, j)]
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp %>% 
+        inner_join(df.core[,c(4, 8, 24:ncol(df.core))] %>% filter(Year == 2010 ) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
+                   %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None, 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+  
+  did.core <- rbind(did.core, outcomes$coeftable)
+  
+  
+}
+
+
+did.core <- did.core[-1,]
+rownames(did.core) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+df.core %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0), 
+         Treated = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Post, Treated) %>% 
+  select(MCD:NetWorth) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  pivot_longer(cols = MCD:NetWorth) %>% 
+  mutate(value = round(value, 2)) %>% 
+  #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
+  pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
+  mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
+  cbind(did.core) %>% 
+   select(name, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
+  mutate(Estimate = round(Estimate, 2), 
+         `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
+         `% Change` = round(Estimate / `1_0` * 100, 1)) %>% 
+  rename(Outcome = name) %>% 
+  select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Total Patients by Insurnace" = 4, "Quality Measure Components" = 6, "Financial Components" = 4)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
 
 ```
-
-## Overall average effects
 
 
 ## Effects stratified by profitability

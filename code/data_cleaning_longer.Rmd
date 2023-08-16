@@ -1030,11 +1030,11 @@ dfc <- comp.initial %>%
 ```
 
 
-## Finalize the core set of measures
+## Finalize the core set of measures, adjust Altman components for inf estimates
 ```{r}
 
 dfc <- dfc %>% 
-  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6, 
+  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100, 
                CostPerPat = ngla_expense / Total, 
                months_of_cash = as.numeric(months_of_cash),
                Liquidity = (Assets - Liabilities) / Assets,
@@ -1046,6 +1046,7 @@ dfc <- dfc %>%
 
 vec.atts <- rep(c(2012:2021), (table(comp.initial$Att) / 12)[-1])
 
+set.seed(123)
 dfc <- rbind(dfc %>% filter(Att > 0), dfc %>% 
   filter(Att == 0) %>% 
   group_by(`BHCMIS ID`) %>% 
@@ -1053,6 +1054,7 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
   mutate(year.rel = Year - Att.random)
 
 dfc
+######adjust Altman components for inf estimates
   
 ```
 
