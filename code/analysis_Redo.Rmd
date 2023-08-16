@@ -157,7 +157,87 @@ dfc %>%
 
 
 ## Overall Effects on Key Variables
+```{r}
 
+df.core <- dfc %>% 
+  mutate(MCD = Total * Pct.MCD / 100, 
+         None = Total * Pct.None / 100, 
+         MCR = Total * Pct.MCR / 100, 
+         COM = Total * Pct.COM / 100, 
+         
+         crc.rate = crc.rate * 100, 
+         pap.rate = pap.rate * 100, 
+         childbmi.rate = childbmi.rate * 100, 
+         adultbmi.rate = adultbmi.rate * 100, 
+         htn.rate = htn.rate * 100, 
+         dm.rate = dm.rate * 100) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         Total,Qcomp, Altman, #MCD:COM, 
+         #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
+         #Liquidity:NetWorth, 
+         Pct.NHA:Pct.COM) #%>%  mutate(Altman = ifelse(is.infinite(Altman), NA, Altman))#, #pap.rate:dm.total, Liquidity:Altman) 
+  
+
+
+
+did.core <- c(0, 0, 0, 0)
+
+for (j in 10:12){
+  
+  df.temp <- df.core[,c(1:9, j)]
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp %>% 
+        inner_join(df.core[,c(4, 8, 13:ncol(df.core))] %>% filter(Year == 2010 ) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
+                   %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None, 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+  
+  did.core <- rbind(did.core, outcomes$coeftable)
+  
+  
+}
+
+
+did.core <- did.core[-1,]
+rownames(did.core) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+df.core %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0), 
+         Treated = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Post, Treated) %>% 
+  select(Total:Altman) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  pivot_longer(cols = Total:Altman) %>% 
+  mutate(value = round(value, 2)) %>% 
+  #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
+  pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
+  mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
+  cbind(did.core) %>% 
+   select(name, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
+  mutate(Estimate = round(Estimate, 2), 
+         `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
+         `% Change` = round(Estimate / `1_0` * 100, 1)) %>% 
+  rename(Outcome = name) %>% 
+  select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  #pack_rows(index = c("Total Patients by Insurnace" = 4, "Quality Measure Components" = 6, "Financial Components" = 4)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
+```
 
 
 ## Broken down by components
@@ -246,6 +326,81 @@ df.core %>%
 
 ## Effects stratified by profitability
 
+```{r}
+
+splits <- quantile(dfc[dfc$Year == 2010,]$ngla_net_gain_loss / dfc[dfc$Year == 2010,]$ngla_revenue, c(0.33, 0.66), na.rm = TRUE)
+
+
+df.profit <- dfc %>% 
+  mutate(MCD = Total * Pct.MCD / 100, 
+         None = Total * Pct.None / 100, 
+         MCR = Total * Pct.MCR / 100, 
+         COM = Total * Pct.COM / 100, 
+         
+         crc.rate = crc.rate * 100, 
+         pap.rate = pap.rate * 100, 
+         childbmi.rate = childbmi.rate * 100, 
+         adultbmi.rate = adultbmi.rate * 100, 
+         htn.rate = htn.rate * 100, 
+         dm.rate = dm.rate * 100) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         Total, Qcomp, Altman) %>%  
+  mutate(Altman = ifelse(is.infinite(Altman), NA, Altman)) %>% 
+  ungroup()#, #pap.rate:dm.total, Liquidity:Altman) 
+  
+df.profit <- df.profit %>% 
+  left_join(dfc %>% filter(Year == 2010) %>% select(ID, ngla_net_gain_loss, ngla_revenue, ngla_expense, Assets, Pct.NHA:Pct.COM) %>% 
+  mutate(profit.class = ifelse(ngla_net_gain_loss / ngla_revenue < 0.017, 1, 
+              ifelse(ngla_net_gain_loss / ngla_revenue >= 0.017 & ngla_net_gain_loss / ngla_revenue <= 0.081, 2, 
+              ifelse(ngla_net_gain_loss / ngla_revenue > 0.081, 3, NA)))) , by = c("ID")) 
+
+
+
+
+did.profit <- c(0, 0, 0, 0)
+for (g in 1:3){
+  for (j in 10:12){
+  
+  df.temp <- df.profit[,c(1:9, j, 13:ncol(df.profit))] 
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp %>% filter(profit.class == g), 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCR + Pct.None, 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+  
+  did.profit <- rbind(did.profit, outcomes$coeftable)
+  
+}}
+
+
+did.profit <- did.profit[-1,]
+rownames(did.profit) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+  did.profit %>% 
+   select(name, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
+  mutate(Estimate = round(Estimate, 2), 
+         `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
+         `% Change` = round(Estimate / `1_0` * 100, 1)) %>% 
+  rename(Outcome = name) %>% 
+  select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  #pack_rows(index = c("Total Patients by Insurnace" = 4, "Quality Measure Components" = 6, "Financial Components" = 4)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
+```
+
+
+
 
 ## Effects startified by clinic size
 
@@ -281,14 +436,16 @@ quantile(dfc[dfc$Year == 2010,]$ngla_net_gain_loss / dfc[dfc$Year == 2010,]$ngla
 dfc.new <- dfc %>% 
         select(ID, Year, Tx, Att, STATE, Sites, htn.rate, dm.rate, imm.rate, crc.rate, pap.rate, childbmi.rate, adultbmi.rate, ivd.rate, cad.rate, asthma.rate, Total, ngla_net_gain_loss, ngla_revenue, ngla_expense, Staff, months_of_cash, quick_ratio, fringe_rate, Assets, Liabilities, 
                Qcomp:Altman)
-        
+      
+
+df.temp  
 
 
 did2s(
       data = dfc.new %>% 
-        inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue > 0.083) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
+        inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue > 0.081 ) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
                    %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
-      yname = "Altman", 
+      yname = "Total", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None, 
         second_stage = ~ i(Tx, ref = FALSE),
