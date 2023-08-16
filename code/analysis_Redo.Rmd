@@ -158,6 +158,12 @@ dfc %>%
 
 ## Overall Effects on Key Variables
 
+```{r}
+
+
+
+
+```
 
 ## Overall average effects
 
@@ -193,20 +199,18 @@ Significant Variables
 
 summary(as.numeric(dfc[dfc$Year == 2010,]$Total))
 summary(as.numeric(dfc[dfc$Year == 2010,]$months_of_cash))
-summary(dfc[dfc$Year == 2010,]$ngla_net_gain_loss / dfc[dfc$Year == 2010,]$ngla_revenue)
+quantile(dfc[dfc$Year == 2010,]$ngla_net_gain_loss / dfc[dfc$Year == 2010,]$ngla_revenue, c(0.33, 0.67), na.rm = TRUE)
+
+
+dfc.new <- dfc %>% 
+        select(ID, Year, Tx, Att, STATE, Sites, htn.rate, dm.rate, imm.rate, crc.rate, pap.rate, childbmi.rate, adultbmi.rate, ivd.rate, cad.rate, asthma.rate, Total, ngla_net_gain_loss, ngla_revenue, ngla_expense, Staff, months_of_cash, quick_ratio, fringe_rate, Assets, Liabilities, 
+               Qcomp:Altman)
+        
+
 
 did2s(
-      data = dfc %>% 
-        select(ID, Year, Tx, STATE, Sites, htn.rate, dm.rate, imm.rate, crc.rate, pap.rate, childbmi.rate, adultbmi.rate, ivd.rate, cad.rate, asthma.rate, Total, ngla_net_gain_loss, ngla_revenue, ngla_expense, Staff, months_of_cash, quick_ratio, fringe_rate, Assets, Liabilities) %>% 
-        mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6, 
-               CostPerPat = ngla_expense / Total, 
-               months_of_cash = as.numeric(months_of_cash),
-               Liquidity = (Assets - Liabilities) / Assets,
-               Profitability = ngla_net_gain_loss / Assets, 
-               Efficiency = ngla_revenue / Assets,
-               NetWorth = (Assets - Liabilities) / Liabilities, 
-               Altman = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% 
-        inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue > 0.03) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
+      data = dfc.new %>% 
+        inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/ngla_revenue > 0.083) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
                    %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
       yname = "Altman", 
       treatment = "Tx",
@@ -217,8 +221,8 @@ did2s(
     )
 
 
-event_study(data = dfc %>% mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate) / 6) %>% 
-              inner_join(dfc %>% filter(Year == 2010 & Total > 10000)# ngla_net_gain_loss/ngla_revenue < 0.03 as.numeric(months_of_cash) < 2)#Total > 10000) 
+event_study(data = dfc.new %>% left_join(dfc %>% select(ID, Year, Pct.NHA:Pct.COM), by = c("ID","Year")) %>% 
+              inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/Assets < 0.05)# ngla_net_gain_loss/ngla_revenue < 0.03 as.numeric(months_of_cash) < 2)#Total > 10000) 
                    %>% select(ID) %>% unique() , by = c("ID")), 
   yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None) %>% 
   filter(abs(term) <= 5) %>% 

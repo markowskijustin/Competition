@@ -1033,35 +1033,34 @@ dfc <- comp.initial %>%
 ## Finalize the core set of measures
 ```{r}
 
-dfc %>% 
-  mutate(Liabilities = `Liabilities (as pct of assets)` * `Total net assets`, 
-         Staffing = `Total expenses before depreciation` * Personnel, 
-         LBE.pct = `Gross land, buildings and equipment (LBE)` / `Total net assets`, 
-         `Liabilities (as pct of assets)` = `Liabilities (as pct of assets)` * 100, 
-         `Surplus as a pct of before dep expenses` = `Surplus as a pct of before dep expenses` * 100, 
-         Qcomp = (pap.rate + crc.rate + asthma.rate + cad.rate + ivd.rate + childbmi.rate + adultbmi.rate) / 7, 
-         CostOfCare = `Total expenses before depreciation` / Total) %>% 
+dfc <- dfc %>% 
+  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6, 
+               CostPerPat = ngla_expense / Total, 
+               months_of_cash = as.numeric(months_of_cash),
+               Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_net_gain_loss / Assets, 
+               Efficiency = ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities, 
+               Altman = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% 
+  mutate(Att.random = ifelse(Att > 0, Att, NA)) 
+
+vec.atts <- rep(c(2012:2021), (table(comp.initial$Att) / 12)[-1])
+
+dfc <- rbind(dfc %>% filter(Att > 0), dfc %>% 
+  filter(Att == 0) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att.random = sample(size = 1, vec.atts, replace = TRUE))) %>% 
+  mutate(year.rel = Year - Att.random)
+
+dfc
   
-  mutate(Liquidity =  `Total net assets` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
-         Profitability =  `Unrestricted surplus (deficit) before depreciation` / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
-         Efficiency = (`Total revenue (unrestricted & restricted)` - `Total expenses before depreciation`) / (Cash + Investments + Receivables + `Gross land, buildings and equipment (LBE)`), 
-         NetWorth = (100 - `Liabilities (as pct of assets)`) / `Liabilities (as pct of assets)` / 100) %>% 
-  mutate(Altmans.Z = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% # 6.56, 3.26, 6.72, 1.05  OR 0.18, 0.3, 0.81, 0.14
-  mutate(Liquidity = ifelse(Liquidity == 'Inf', NA, Liquidity), 
-         Profitability = ifelse(Profitability == 'Inf', NA, Profitability), 
-         Efficiency = ifelse(Efficiency == 'Inf', NA, Efficiency), 
-         NetWorth = ifelse(NetWorth == 'Inf', NA, NetWorth), 
-         Altmans.Z = ifelse(Altmans.Z == 'Inf', NA, Altmans.Z))
-
-
-
 ```
 
 
 
 ## Write the file
 ```{r}
-#write_csv(dfc, file = "/Users/jhm65/Dropbox/Projects/Competition/data_processed/analyticalfile.csv")
+#write_csv(dfc, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
 
 ```
 
