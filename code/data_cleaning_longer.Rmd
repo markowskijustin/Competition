@@ -985,7 +985,7 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   group_by(`BHCMIS ID`, Year) %>% 
   summarise(Clinics = max(Clinics)) %>% 
   pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
-  filter(`2010` == 1 & `2011` == 1 & `2012` == 1) %>%   
+  filter(`2010` == 1 & `2011` == 1 ) %>%   
   #filter(`2014` == 1 & `2015` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
@@ -1042,11 +1042,17 @@ dfc <- dfc %>%
                Liquidity = (Assets - Liabilities) / Assets,
                Profitability = ngla_net_gain_loss / Assets, 
                Efficiency = ngla_revenue / Assets,
-               NetWorth = (Assets - Liabilities) / Liabilities, 
-               Altman = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% 
+               NetWorth = (Assets - Liabilities) / Liabilities)
+
+dfc <- dfc %>% 
+  mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
+         Profitability = ifelse(is.infinite(Profitability), NA, Profitability), 
+         Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency), 
+         NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
+         Altman = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% 
   mutate(Att.random = ifelse(Att > 0, Att, NA)) 
 
-vec.atts <- rep(c(2013:2021), (table(comp.initial$Att) / 12)[-1])
+vec.atts <- rep(c(2012:2021), (table(comp.initial$Att) / 12)[-1])
 
 set.seed(123)
 dfc <- rbind(dfc %>% filter(Att > 0), dfc %>% 
@@ -1055,7 +1061,6 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
   mutate(Att.random = sample(size = 1, vec.atts, replace = TRUE))) %>% 
   mutate(year.rel = Year - Att.random)
 
-dfc
 ######adjust Altman components for inf estimates
   
 ```
