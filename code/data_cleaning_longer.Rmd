@@ -111,72 +111,105 @@ included.treat <- 2013:2021
 ```{r}
 
 ## Zips
-locs <- paste("/Users/jhm65/Dropbox/Git/UDS/UDS-", c(2014:2021), "-Full-Dataset.xlsx", sep = "")
-uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes") 
+locs <- paste("/Users/jhm65/Dropbox/Git/UDS/UDS-", c(2012:2021), "-Full-Dataset.xlsx", sep = "")
+uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes")[,c(1:4, 6, 5)] 
 
-new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
-colnames(uds.zip) <-    new.zip.names
+#new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
+
+new.zip.names <- colnames(uds.zip)
 
 for(i in 2:length(locs)){
-  temp.zip <- read_excel(locs[i], sheet = "HealthCenterZipCodes")
+  temp.zip <- read_excel(locs[i], sheet = "HealthCenterZipCodes")[,c(1:5, 10)]
+    
   colnames(temp.zip) <- new.zip.names
-  uds.zip <- rbind(uds.zip, temp.zip %>% mutate(`Zip Code` = str_pad(`Zip Code`, 5, pad = "0")))
+  uds.zip <- rbind(uds.zip, temp.zip %>% mutate(ZipCode = str_pad(ZipCode, 5, pad = "0")))
 }
 
-# ## Rename
-# new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
-# colnames(uds.zip) <-    new.zip.names
+
+  
+uds.zip$ReportingYear <- as.numeric(uds.zip$ReportingYear)
+uds.zip$NumberofPatients <- as.numeric(uds.zip$NumberofPatients)
+
+uds.zip[is.na(uds.zip$NumberofPatients),]$NumberofPatients <- 0
+
+uds.zip <- uds.zip[uds.zip$ZipCodeType == "ZipCode",]
+
+
+```
+
+
+
+
+
+
+
+
+## Bunk old Zip code code
+
+```{r}
+
+# 
+# # ## Rename
+# # new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
+# # colnames(uds.zip) <-    new.zip.names
+# # 
+# # 
+# # ## Clean
+# # 
+# # uds.zip[uds.zip$`Total Number of Patients`== '-' | uds.zip$`Total Number of Patients`== '--',]$`Total Number of Patients` <- NA
+# # uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
+# # uds.zip <- uds.zip[!is.na(uds.zip$`Total Number of Patients`),] %>% 
+# #     mutate(`Reporting Year` = as.numeric(`Reporting Year`))
+# # 
+# # uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
+# # uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
+# # uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
+# # uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
+# # 
+# # 
+# # uds.zip <- cbind(uds.zip, broken.total = rowSums(uds.zip[,c(6:9)], na.rm = TRUE), missings = rowSums(is.na(uds.zip[,c(6:9)]))) %>% 
+# #   mutate(`Total Number of Patients` = as.numeric(`Total Number of Patients`)) %>% 
+# #   mutate(`Total Number of Patients` = ifelse(is.na(`Total Number of Patients`), round(missings*16/4), `Total Number of Patients`)) %>% 
+# #   mutate(`None_Uninsured Patients` = ifelse(is.na(`None_Uninsured Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `None_Uninsured Patients`), 
+# #          `Medicaid_CHIP_Other Public Patients` = ifelse(is.na(`Medicaid_CHIP_Other Public Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicaid_CHIP_Other Public Patients`), 
+# #          `Medicare Patients` = ifelse(is.na(`Medicare Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicare Patients`), 
+# #          `Private Patients` = ifelse(is.na(`Private Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Private Patients`))
 # 
 # 
-# ## Clean
-# 
-# uds.zip[uds.zip$`Total Number of Patients`== '-' | uds.zip$`Total Number of Patients`== '--',]$`Total Number of Patients` <- NA
+# uds.zip$`Reporting Year` <- as.numeric(uds.zip$`Reporting Year`)
 # uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
-# uds.zip <- uds.zip[!is.na(uds.zip$`Total Number of Patients`),] %>% 
-#     mutate(`Reporting Year` = as.numeric(`Reporting Year`))
-# 
 # uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
 # uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
 # uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
 # uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
 # 
 # 
-# uds.zip <- cbind(uds.zip, broken.total = rowSums(uds.zip[,c(6:9)], na.rm = TRUE), missings = rowSums(is.na(uds.zip[,c(6:9)]))) %>% 
-#   mutate(`Total Number of Patients` = as.numeric(`Total Number of Patients`)) %>% 
-#   mutate(`Total Number of Patients` = ifelse(is.na(`Total Number of Patients`), round(missings*16/4), `Total Number of Patients`)) %>% 
-#   mutate(`None_Uninsured Patients` = ifelse(is.na(`None_Uninsured Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `None_Uninsured Patients`), 
-#          `Medicaid_CHIP_Other Public Patients` = ifelse(is.na(`Medicaid_CHIP_Other Public Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicaid_CHIP_Other Public Patients`), 
-#          `Medicare Patients` = ifelse(is.na(`Medicare Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicare Patients`), 
-#          `Private Patients` = ifelse(is.na(`Private Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Private Patients`))
+# uds.zip[is.na(uds.zip$`Total Number of Patients`),]$`Total Number of Patients` <- 0
+# uds.zip[grep("-", uds.zip$`None_Uninsured Patients`),]$`None_Uninsured Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicaid_CHIP_Other Public Patients`),]$`Medicaid_CHIP_Other Public Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicare Patients`),]$`Medicare Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Private Patients`),]$`Private Patients` <- 0
+# 
+# uds.zip.totals <- uds.zip %>%
+#   select(`Grant Number`, `Reporting Year`, `None_Uninsured Patients`:`Total Number of Patients`) %>%
+#   group_by(`Grant Number`, `Reporting Year`) %>% summarise(None = sum(`None_Uninsured Patients`, na.rm = T),
+#                                                            MCR = sum(`Medicare Patients`, na.rm = T),
+#                                                            COM = sum(`Private Patients`, na.rm = T),
+#                                                            MCD = sum(`Medicaid_CHIP_Other Public Patients`, na.rm = T),
+#                                                            Total = sum(`Total Number of Patients`, na.rm = T))
+# 
+# uds.zip <- uds.zip[uds.zip$`Zip Code Type` == "ZipCode",]
 
 
-uds.zip$`Reporting Year` <- as.numeric(uds.zip$`Reporting Year`)
-uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
-uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
-uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
-uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
-uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
 
-
-uds.zip[is.na(uds.zip$`Total Number of Patients`),]$`Total Number of Patients` <- 0
-uds.zip[grep("-", uds.zip$`None_Uninsured Patients`),]$`None_Uninsured Patients` <- 0
-uds.zip[grep("-", uds.zip$`Medicaid_CHIP_Other Public Patients`),]$`Medicaid_CHIP_Other Public Patients` <- 0
-uds.zip[grep("-", uds.zip$`Medicare Patients`),]$`Medicare Patients` <- 0
-uds.zip[grep("-", uds.zip$`Private Patients`),]$`Private Patients` <- 0
-
-uds.zip.totals <- uds.zip %>%
-  select(`Grant Number`, `Reporting Year`, `None_Uninsured Patients`:`Total Number of Patients`) %>%
-  group_by(`Grant Number`, `Reporting Year`) %>% summarise(None = sum(`None_Uninsured Patients`, na.rm = T),
-                                                           MCR = sum(`Medicare Patients`, na.rm = T),
-                                                           COM = sum(`Private Patients`, na.rm = T),
-                                                           MCD = sum(`Medicaid_CHIP_Other Public Patients`, na.rm = T),
-                                                           Total = sum(`Total Number of Patients`, na.rm = T))
-
-uds.zip <- uds.zip[uds.zip$`Zip Code Type` == "ZipCode",]
+  
+```
 
 
 
 
+
+```{r}
 
 ## Sites
 locs <- paste("/Users/jhm65/Dropbox/Git/UDS/UDS-", c(2012:2021), "-Full-Dataset.xlsx", sep = "")
@@ -328,6 +361,67 @@ uds.sites.full %>%
 ```
 
 
+## Read in census data for all zip codes
+```{r}
+library(tidycensus)
+
+census <- data.frame(ZipCode = 0, NAME = 0, YEAR = 0, 
+                     TotalPop = 0,
+                     Male = 0, Female = 0, 
+                     AgeUnder18 = 0, Age18to64 = 0, Age65andOver = 0, 
+                     White = 0, Black = 0, AIAN = 0, Asian = 0, MR = 0, Hispanic = 0, EducLow = 0, EducMid = 0, EducHigh = 0, 
+                     PovertyStatusDet = 0, IncomeBelowPoverty = 0, Unemployed = 0, Unemp_denom = 0, 
+                     MCD.denom = 0, Medicaid = 0, Unins.denom = 0, Uninsured = 0)
+
+for (i in 1:10){
+  census <- rbind(census, get_acs(geography = "zcta", survey = "acs5",
+                       variables = c("B01003_001","B17001_001","B17001_002","B01001_002","B01001_026",
+                                     "B02001_002","B02001_003","B02001_004","B02001_005","B02001_006","B02001_008",
+                                     "B03001_003", 
+                                     "B01001_003","B01001_004","B01001_005","B01001_006","B01001_007","B01001_008","B01001_009",
+                                     "B01001_010","B01001_011","B01001_013","B01001_014","B01001_015","B01001_016","B01001_017",
+                                     "B01001_018","B01001_019","B01001_020","B01001_021","B01001_022","B01001_023","B01001_024","B01001_025",
+                                     "B01001_027","B01001_028","B01001_029","B01001_030","B01001_031","B01001_032","B01001_033","B01001_034",
+                                     "B01001_035","B01001_036","B01001_037","B01001_038","B01001_039","B01001_040","B01001_041","B01001_042","B01001_043",
+                                     "B01001_044","B01001_045","B01001_046","B01001_047","B01001_048","B01001_049",
+                                     "B06009_002","B06009_003", "B06009_004","B06009_005","B06009_006",
+                                     "B23025_002","B23025_005",
+                                     "C27007_001", "C27007_004", "C27007_007", "C27007_010", "C27007_014", "C27007_017", "C27007_020",
+                                     "B18135_001","B18135_007","B18135_012","B18135_018","B18135_023","B18135_029","B18135_034"), 
+                       year = 2011 + i) %>% 
+  pivot_wider(id_cols = c(GEOID, NAME), names_from = variable, values_from = estimate) %>% 
+    mutate(YEAR = 2009 + i, TotalPop = B01003_001, PovertyStatusDet = B17001_001, IncomeBelowPoverty = B17001_002,
+           AgeUnder18 = B01001_003 + B01001_004 + B01001_005 + B01001_006 + B01001_027 + B01001_028 + B01001_029 + B01001_030,
+           Age18to64 = B01001_007 + B01001_008 + B01001_009 + B01001_010 + B01001_011 + B01001_013 + B01001_014 + B01001_015 + 
+                       B01001_016 + B01001_017 + B01001_018 + B01001_019 + B01001_031 + B01001_032 + B01001_033 + B01001_034 +
+                       B01001_035 + B01001_036 + B01001_037 + B01001_038 + B01001_039 + B01001_040 + B01001_041 + B01001_042 + B01001_043, 
+           Age65andOver = B01001_020 + B01001_021 + B01001_022 + B01001_023 + B01001_024 + B01001_025 + 
+                          B01001_044 + B01001_045 + B01001_046 + B01001_047 + B01001_048 + B01001_049, 
+           Male = B01001_002, Female = B01001_026, 
+           White = B02001_002, Black = B02001_003, AIAN = B02001_004, Asian = B02001_005 + B02001_006, MR = B02001_008, 
+           Hispanic = B03001_003, 
+           EducLow = B06009_002, EducMid = B06009_003 + B06009_004, EducHigh = B06009_005 + B06009_006,
+           Unemployed = B23025_005, Unemp_denom = B23025_002,
+           MCD.denom = C27007_001	, Medicaid = C27007_004	 + C27007_007 + C27007_010	+ C27007_014 + C27007_017 + C27007_020,
+           Unins.denom = B18135_001, Uninsured = B18135_007 + B18135_012 + B18135_018 + B18135_023 + B18135_029 + B18135_034) %>% 
+    select(ZipCode = GEOID, NAME, YEAR, TotalPop:Uninsured))
+  
+  print(i)
+}
+census <- census[-1,]
+
+##########
+census$ZipCode <- substr(census$NAME, 7, 11)
+#census$ZipCode <- str_pad(census$ZipCode, 5, pad = "0")
+
+
+census %>% 
+  filter(YEAR == 2020) %>% 
+  select(ZipCode) %>% 
+  #unique() %>% 
+  table() %>% 
+  table()
+```
 
 
 ## Merge with Older UDSs 1996-2011
@@ -1024,10 +1118,10 @@ comp.initial <- comp.initial %>%
         select(`BHCMIS ID`, YearFirstInZip) %>% 
         unique(), by = c("BHCMIS ID")) %>% #filter(`BHCMIS ID` == "H80CS00101") %>% 
         mutate(Expandor = ifelse(is.na(YearFirstInZip) | Att != YearFirstInZip, 0, 1)) %>%  #  is.na(YearFirstInZip) | Att != YearFirstInZip
-        group_by(`BHCMIS ID`) %>% summarise(Expandor = max(Expandor)), by = c("BHCMIS ID")) %>% filter(Expandor == 0)
+        group_by(`BHCMIS ID`) %>% summarise(Expandor = max(Expandor)), by = c("BHCMIS ID")) 
 
 
-dfc <- comp.initial %>% 
+dfc <- comp.initial %>% filter(Expandor == 0) %>% 
   left_join(df.comp, by = c("BHCMIS ID" = "BHCMISID", "Year"))
 ```
 

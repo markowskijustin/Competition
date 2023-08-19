@@ -16,128 +16,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-```{r}
-
-
-df.sum <- df.qual.exp %>% #filter(`Grant Number` != "H80CS00225") %>% 
-  ungroup() %>% 
-  #rename(`Grant Number` = Grant.Number, `Surplus as a pct of before dep expenses` = Surplus.as.a.pct.of.after.dep.expenses) %>% 
-  #filter(MarketShare < 0.4) %>%  #median(MarketShare, na.rm = TRUE) - 0.25
-  #inner_join(df.qual.exp %>% filter(Year == 2015 & Total < 15000) %>% select(`Grant Number`), by = c("Grant Number")) %>%  #& Zips < 1.75 or 7.75
-  select(`Grant Number`, Year, ID, Att, Sites, Qcomp, Altmans.Z, Pct.HTN.CNTRL, Total, IMM2yo:DepScrn) %>%
-  # inner_join(df.qual.exp %>% filter(Year == 2015) %>%
-  #                                           mutate(ZipFilter = ifelse(Total < 12000, 1,
-  #                                                              ifelse(Total > 12000, 2, NA))) %>% select(`Grant Number`, ZipFilter), by = c("Grant Number")) %>%
-  inner_join(df.qual.exp %>% filter(Year == 2016) %>% #mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% 
-               select(`Grant Number`, ZipFilter, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("Grant Number")) %>% 
-  select(`Grant Number`, Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z, Pct.HTN.CNTRL, Pct.NHA:Pct.Children, MCD, COM, MCR, Total, IMM2yo:DepScrn) %>% 
-  mutate(Tx = ifelse(Year >= Att & Att > 0, 1, 0)) %>% 
-  unique() %>% 
-  mutate(NewQuality = (CRC + ChildBMI + AdultBMI + Tobac + DepScrn) / 5)
-
-#library(did2s)
-
-did2s(
-      data = df.sum %>% inner_join(df.qual.exp %>% filter(MarketShare > 1) %>% select(`Grant Number`) %>% unique(), by = c("Grant Number")), 
-      yname = "Qcomp", 
-      treatment = "Tx",
-        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
-        second_stage = ~ i(Tx, ref = FALSE),
-        cluster_var = "ID",
-      verbose = FALSE
-    )
-
-
-#select(ID, Year, ZipFilter, ID, Att, Sites, Qcomp, Altmans.Z) %>% left_join(df.qual.exp %>% select(ID, Year, Pct.NHA:Pct.Children, MCD, COM, MCR), by = c("ID","Year"))
-out.qual <- event_study(data = df.qual.exp %>% filter(ZipFilter == 1), 
-  yname = "Altmans.Z", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM)
-
-out.qual %>% 
-  filter(estimator %notin% c("Borusyak, Jaravel, Spiess (2021)")) %>% 
-filter(abs(term) <= 3) %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) 
-
-```
-
-
-
-
-
-## Variations
-
-
-```{r}
-
-
-did2s(
-      data = df.sum %>% left_join(df.spill2 %>% 
-  group_by(`Grant Number`, Year) %>% 
-  summarise(num = sum((Dist + 1) * Sites), 
-         denom = sum(Sites), 
-         avgdist = num / denom) %>% 
-  filter(Year %in% c(2015, 2019)) %>% 
-  pivot_wider(id_cols = `Grant Number`, names_from = Year, values_from = avgdist) %>% 
-  mutate(ds = `2019` - `2015`) %>% 
-    ungroup() %>% 
-    mutate(filt = ifelse(ds > median(ds, na.rm = TRUE), 1, 0)), by = c("Grant Number")) %>% filter(ds < 1),#%>% filter(ZipFilter == 2), 
-      yname = "NewQuality", 
-      treatment = "Tx",
-        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
-        second_stage = ~ i(Tx, ref = FALSE),
-        cluster_var = "ID",
-      verbose = FALSE
-    )
-
-
-did2s(
-      data = df.sum %>% left_join(df.spill2 %>% 
-  group_by(`Grant Number`, Year) %>% 
-  summarise(num = sum((Dist + 1) * Sites), 
-         denom = sum(Sites), 
-         avgdist = num / denom) , by = c("Grant Number","Year")) ,#%>% filter(ZipFilter == 2), 
-      yname = "NewQuality", 
-      treatment = "Tx",
-        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
-        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(avgdist / 10) + I(Tx *as.numeric(avgdist / 10)),
-        cluster_var = "ID",
-      verbose = FALSE
-    )
-
-
-
-
-did2s(
-      data = df.sum %>% left_join(df.z.dist %>% select(`Grant Number.y`, DistToClosestSite), by = c("Grant Number" = "Grant Number.y")) %>% filter(is.na(DistToClosestSite) | DistToClosestSite > 5),
-      yname = "Qcomp", 
-      treatment = "Tx",
-        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
-        second_stage = ~ i(Tx, ref = FALSE) ,
-        cluster_var = "ID",
-      verbose = FALSE
-    )
-
-
-set.seed(345)
-did2s(
-      data = df.sum %>% left_join(df.z.dist %>% select(`Grant Number.y`, DistToClosestSite), by = c("Grant Number" = "Grant Number.y")) %>% 
-        group_by(ID) %>% 
-  mutate(DistToClosestSite = ifelse(is.na(DistToClosestSite), sample(size = 1, df.z.dist$DistToClosestSite, replace = T), DistToClosestSite)),
-      yname = "NewQuality", 
-      treatment = "Tx",
-        first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.Children + MCD + MCR + COM, 
-        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(DistToClosestSite / 1) + I(Tx *as.numeric(DistToClosestSite / 1)),
-        cluster_var = "ID",
-      verbose = FALSE
-    )
-
-
-
-```
-
-
 
 
 # Redo the analysis
@@ -535,14 +413,10 @@ theme(panel.spacing = unit(1, "lines")) +
 
 
 
-## Changes in geographic distribution of resources by Distance to competitive zip
-
-
-## Rival selecting where to put new site
 
 
 
-
+## OTher splits
 
 Splits
 - Total at 10000 and at 25000
@@ -585,7 +459,7 @@ did2s(
 
 
 event_study(data = dfc.new %>% left_join(dfc %>% select(ID, Year, Pct.NHA:Pct.COM), by = c("ID","Year")) %>% 
-              inner_join(dfc %>% filter(Year == 2010 & ngla_net_gain_loss/Assets < 0.05)# ngla_net_gain_loss/ngla_revenue < 0.03 as.numeric(months_of_cash) < 2)#Total > 10000) 
+              inner_join(dfc %>% filter(Year == 2010 )# ngla_net_gain_loss/ngla_revenue < 0.03 as.numeric(months_of_cash) < 2)#Total > 10000) 
                    %>% select(ID) %>% unique() , by = c("ID")), 
   yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None) %>% 
   filter(abs(term) <= 5) %>% 
@@ -600,4 +474,486 @@ event_study(data = dfc.new %>% left_join(dfc %>% select(ID, Year, Pct.NHA:Pct.CO
 
 
 
+
+
+
+## Changes in geographic distribution of resources by Distance to competitive zip
+
+```{r}
+
+## Treatment vs control, only in zip code of interest
+df.z <- left_join(dfc #%>% filter(`Grant Number` != "H80CS00225")
+                  , #uds.zip %>% mutate(Zip = `Zip Code`) %>% select(`Grant Number`, Zip) %>% unique() , by = c("Grant Number")) %>%
+                  uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
+                    filter(Year %in% c(2010:2021)) %>% 
+              select(`BHCMIS ID`, Zip) %>%
+              unique() %>% filter(!is.na(Zip)), by = c("BHCMIS ID")) %>%
+  left_join(uds.zip, by = c("BHCMIS ID" = "BHCMISID", "Year" = "ReportingYear", "Zip" = "ZipCode")) %>%
+  filter(!is.na(GrantNumber)) %>% 
+  left_join(clinics.in.zips %>% select(Zip:Clinics), by = c("Zip","Year")) %>%
+  mutate(Tx.z = ifelse(Clinics == 1 , 0, 
+                ifelse(is.na(Clinics), NA, 1)), # | is.na(Clinics)
+         ID = as.numeric(factor(paste(`BHCMIS ID`, Zip, sep = "-")))) %>%
+  select(`BHCMIS ID`:Year, Att, ID, Zip:Tx.z) %>%
+  arrange(`BHCMIS ID`, Zip, Year) %>% 
+  unique() #%>%  inner_join(df.qual.exp %>% filter(Year == 2015 & Total > 12050) %>% select(`Grant Number`), by = c("Grant Number"))  #& Zips < 3.75 or 4.75
+  # %>%   filter(MarketShare > median(MarketShare, na.rm = TRUE) - 0.25) 
+
+df.z <- df.z %>%
+  left_join(df.z %>%
+            filter(Tx.z == 1) %>%
+            group_by(ID, Zip) %>%
+            summarise(Att.z = min(Year)), by = c("ID", "Zip")) %>%
+  mutate(Att.z = ifelse(is.na(Att.z), 0, Att.z)) #%>%
+# inner_join(df.z %>% filter(!is.na(Clinics)) %>% group_by(ID) %>% summarise(n()) %>% filter(`n()` == length(unique(df.qual.exp$Year))), by = c("ID")) #%>% filter(Att == Att.z)
+
+
+## Whole zip as one measure
+
+df.z.full <- df.z %>% ############## NOTE: Original +500 effect was recoved with Att.z, not Att
+  select(Zip, Att.z, Year) %>% 
+  unique() %>% 
+  left_join(uds.zip, by = c("Zip" = "ZipCode", "Year" = "ReportingYear")) %>% 
+  left_join(dfc %>% 
+            select(`BHCMIS ID`, Year, Qcomp), by = c("BHCMISID" = "BHCMIS ID", "Year")) %>% 
+  group_by(Zip, Year, Att.z) %>% 
+  summarise(
+    Total.z = sum(NumberofPatients, na.rm = TRUE), 
+    Quality.z = sum(NumberofPatients * Qcomp, na.rm = TRUE) / Total.z) %>% 
+  ungroup() %>% 
+  mutate(ID = as.numeric(as.factor(Zip)))# %>% group_by(`Grant Number`, Year, Att) %>% summarise(ID = min(ID), Total.z = sum(Total.z, na.rm = TRUE)) # %>% filter(Year > 2015),
+
+
+df.zip.1 <- df.z %>% select(ID, Year, Att, NumberofPatients)
+df.zip.2 <- df.z.full %>% select(ID, Year, Att.z, Total.z:Quality.z)
+
+
+
+```
+
+## DIstance Rival Traveled
+```{r}
+
+## Distance of Competitor to New Site
+df.z.dist <- df.z.full %>% 
+  filter(Att.z == Year) %>% 
+  select(Zip:Total.z) %>% 
+  left_join(uds.sites.full %>% select(`BHCMIS ID`, Year, Zip) %>% unique(), by = c("Zip","Year")) %>% 
+  left_join(df.z %>% filter(Tx == 1) %>% select(`BHCMIS ID`, Year, Zip) %>% unique(), by = c("Zip","Year")) %>% 
+  filter(`BHCMIS ID.x` != `BHCMIS ID.y`) 
+
+## Read in Centroid Data
+zip.centroids <- read.csv("/Users/jhm65/Dropbox/Git/Data/ZIP_Code_Population_Weighted_Centroids.csv") %>% 
+  mutate(ZipCode = str_pad(STD_ZIP5, 5, pad = "0")) %>% 
+  select(ZipCode, X, Y)
+## Add missing centroids
+zip.centroids <- rbind(zip.centroids, c(ZipCode = "37243", X = -86.783, Y = 36.165), 
+                                      c(ZipCode = "95951", X = -121.98, Y = 39.73), 
+                                      c(ZipCode = "99733", X = -144.166941, Y = 65.799773)) %>% 
+  mutate(X = as.numeric(X), Y = as.numeric(Y))
+
+df.z.dist <- df.z.dist %>% mutate(DistToClosestSite = NA, ZipOfClosestSite = NA)
+
+for (g in 1:nrow(df.z.dist)){
+#g <- 1
+ temp <- rbind(zip.centroids %>% filter(ZipCode == df.z.dist[g,]$Zip), 
+          zip.centroids %>% filter(ZipCode %in% unique(uds.sites.full[uds.sites.full$`BHCMIS ID` == df.z.dist[g,]$`BHCMIS ID.x` & uds.sites.full$Year == df.z.dist[g,]$Year,]$Zip))) %>% 
+   unique()
+  mm <- as.matrix(dist(as.matrix(temp$X, temp$Y), method = "euclidean"))[-1,1]
+  df.z.dist[g,]$DistToClosestSite <-  min(mm) * 111.139
+  df.z.dist[g,]$ZipOfClosestSite  <- ifelse(is.na(temp[2,]$ZipCode), temp[1,]$ZipCode, unlist(temp[-1,]$ZipCode[rank(mm) == 1]))
+}
+
+#df.z.dist[19,]$DistToClosestSite <- 0
+df.z.dist <- df.z.dist %>% 
+  filter(!is.infinite(DistToClosestSite))
+
+df.z.dist <- df.z.dist %>% 
+  inner_join(df.z.dist %>% group_by(`BHCMIS ID.y`) %>% summarise(Att.z = min(Att.z)), by = c("BHCMIS ID.y", "Att.z")) %>% 
+  unique()
+
+mean(df.z.dist$DistToClosestSite)
+quantile(df.z.dist$DistToClosestSite, probs = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1))
+
+# mean(df.z.dist[df.z.dist$ZipFilter == 1,]$DistToClosestSite)
+# mean(df.z.dist[df.z.dist$ZipFilter == 2,]$DistToClosestSite)
+# 
+# quantile(df.z.dist[df.z.dist$ZipFilter == 1,]$DistToClosestSite, probs = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1))
+# quantile(df.z.dist[df.z.dist$ZipFilter == 2,]$DistToClosestSite, probs = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1))
+
+
+zipsize <- zctas(starts_with = c(df.z.dist$Zip, df.z.dist$ZipOfClosestSite), year = 2010)
+
+
+## Original Figure
+df.z.dist.plot <- df.z.dist %>% 
+  left_join(zipsize %>% select(GEOID10, ALAND10), by = c("Zip" = "GEOID10")) %>% 
+  left_join(uds.sites.full %>% select(Zip, `Site State`) %>% unique(), by = c("Zip")) %>% 
+  left_join(census %>% select(ZipCode, YEAR, TotalPop), by = c("Year" = "YEAR", "Zip" = "ZipCode")) %>% 
+  arrange(desc(DistToClosestSite)) %>% 
+  mutate(Area.SQmiles = ALAND10 / 2.59e6) %>% 
+  mutate(Density.NewZip = TotalPop / Area.SQmiles, 
+         l.density = log(TotalPop / Area.SQmiles)) %>% 
+  unique()
+
+
+
+df.z.dist.plot %>% 
+  ggplot(aes(x = log(Density.NewZip), y = DistToClosestSite)) + geom_point(aes(size = Area.SQmiles)) +
+  ggtitle("Distance from Rival's newly competing zip ocde to closest incumbent zip code by Density and Area of newly competing zip code")
+
+summary(lm(DistToClosestSite ~ log(Density.NewZip), data = df.z.dist.plot))
+
+
+
+# Updated Figure
+df.z.dist.plot <- df.z.dist.plot %>% 
+  select(Zip:ZipOfClosestSite, Density.NewZip) %>% 
+  left_join(zipsize %>% select(GEOID10, ALAND10), by = c("ZipOfClosestSite" = "GEOID10")) %>% 
+  left_join(uds.sites.full %>% select(Zip, `Site State`) %>% unique(), by = c("ZipOfClosestSite" = "Zip")) %>% 
+  left_join(census %>% select(ZipCode, YEAR, TotalPop), by = c("Year" = "YEAR", "ZipOfClosestSite" = "ZipCode")) %>% 
+  arrange(desc(DistToClosestSite)) %>% 
+  mutate(Area.SQmiles = ALAND10 / 2.59e6) %>% 
+  mutate(Density.Origin = TotalPop / Area.SQmiles)
+
+
+df.z.dist.plot %>% 
+  ggplot(aes(x = log(Density.NewZip), y = DistToClosestSite, color = log(Density.Origin))) + geom_point() +
+  scale_colour_gradientn(colours = terrain.colors(10))+ theme_minimal()+
+  ylab("Distance from Competative to closest Rival Site (km)") +
+  ggtitle("Distance from newly competative Zip to Rival's closest existing zip, by log Density of areas")
+
+
+p <- df.z.dist.plot %>% 
+  ggplot(aes(x = log(Density.Origin), y = log(Density.NewZip))) + 
+  geom_point(aes(size = DistToClosestSite, colour = DistToClosestSite)) + 
+  scale_colour_gradientn(colours = c("green","lightblue","purple"),
+                         values = c(1.0,0.7,0.1,0))  +#scale_colour_gradientn(colours = terrain.colors(10))+ 
+  theme_minimal() + ylab("Log Population Density of New Zip Code") + 
+  xlab("Log Population Density of Nearest Service Area Zip Code") + 
+  labs(color = "Distance Travelled to\nOpenNew Site (km)") + 
+  guides(size = FALSE) + xlim(0.5, 11.5) + ylim(0.5, 11.5)
+p
+
+
+summary(lm(log(Density.Origin) ~ log(Density.NewZip), data = df.z.dist.plot))
+```
+
+
+
+
+## Primary effects by distance rival travelled
+```{r}
+set.seed(123)
+df.dist <- df.core %>% 
+  left_join(df.z.dist.plot %>% select(`BHCMIS ID.y`, DistToClosestSite), by = c("BHCMIS ID" = "BHCMIS ID.y")) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Dist.random = sample(size = 1, unique(df.z.dist.plot$DistToClosestSite), replace = TRUE), 
+         Dist.random = ifelse(Att > 0, DistToClosestSite, Dist.random))
+
+
+
+
+#splits <- quantile(dfc[dfc$Year == 2011,]$Total, c(0.5), na.rm = TRUE)
+splits <- quantile(df.dist[df.dist$year.rel == -1,]$Dist.random, c(0.5), na.rm = TRUE)
+
+
+splits1 <- c(min(df.dist$Dist.random, na.rm = TRUE)-1, splits)
+splits2 <- c(splits, max(df.dist$Dist.random, na.rm = TRUE))
+
+
+
+did.dist <- c(0, 0, 0, 0)
+for (g in 1:(length(splits) + 1)){
+  for (j in 10:12){
+  
+  df.temp <- df.dist[,c(1:9, j, 13:ncol(df.dist))] 
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp %>% filter(Dist.random > splits1[g] & Dist.random <= splits2[g]), 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+  
+  did.dist <- rbind(did.dist, outcomes$coeftable)
+  
+}}
+
+
+did.dist <- did.dist[-1,]
+rownames(did.dist) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+
+
+
+data.frame(Subset = sort(rep(1:(length(splits) + 1), 3)),
+      Outcome = rep(c("Total","Quality","Financial"), (length(splits) + 1)),
+      Estimate = as.numeric(did.dist[,1]), 
+      SD = as.numeric(did.dist[,2])) %>% 
+  mutate(Subset.f = as.factor(Subset)) %>% 
+  ggplot(aes(y = Subset.f, x = Estimate, xmin = Estimate - SD * 1.95, xmax = Estimate + SD * 1.95)) + 
+  geom_point() + 
+  xlab("Staggered 2-way DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~Outcome, scales= "free_x", switch = 'y', space = "free_y") +  
+      theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) + 
+  ggtitle("DID Estimates by Baseline Size")
+```
+
+
+
+## Rival selecting where to put new site, takes 30+ minutes to work
+
+```{r}
+
+## Build the first part of the dataset
+
+df.spill <- df.z %>% 
+  left_join(df.z.dist %>% 
+  select(`BHCMIS ID.y`, Zip) %>% 
+    unique() %>% 
+    rename(ZipOfComp = Zip), by = c("BHCMIS ID" = "BHCMIS ID.y")) %>% 
+  #filter(!is.na(ZipOfComp)) %>% 
+  #mutate(ZipOfComp = ifelse(`BHCMIS ID` == "H80CS00765", 95991, ZipOfComp)) %>% 
+  left_join(zip.centroids, by = c("Zip" = "ZipCode")) %>% 
+  left_join(zip.centroids, by = c("ZipOfComp" = "ZipCode")) %>% 
+  mutate(Dist = sqrt((X.x - X.y) ^ 2 + (Y.x - Y.y) ^ 2) * 111.139) %>% 
+  mutate(Dist.f = ifelse(is.na(Dist), "-1",
+                  ifelse(Dist == 0, 0, 
+                  ifelse(Dist > 0 & Dist < 20, 1, 
+                  ifelse(Dist >= 20 & Dist < 50, 2, 
+                  ifelse(Dist >= 50 & Dist < 100, 3, 4)))))) %>% 
+  #filter(is.na(Dist.f) | Dist.f == 2) %>% 
+  left_join(uds.sites.full %>% 
+              filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
+              mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
+                                ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
+                     Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
+                                ifelse(`Operational Schedule` == "Part-Time", 0.5, 0)),
+                     Calendar = ifelse(`Calendar Schedule` == "Year-Round", 1,
+                                ifelse(`Calendar Schedule` == "Seasonal", 0.5, 0))) %>% 
+              group_by(`BHCMIS ID`, Year, Zip) %>% 
+              summarise(Sites = n(), Mean.Hours = mean(Access, na.rm = TRUE), Total.Hours = sum(Access, na.rm = TRUE), 
+                        Perminance = sum(Type.num, na.rm = TRUE), Schedule = sum(Schedule, na.rm = TRUE), Calendar = sum(Calendar, na.rm = TRUE)), by = c("BHCMIS ID","Year", "Zip")) %>% 
+  mutate(Sites = ifelse(is.na(Sites), 0, Sites), 
+         Mean.Hours = ifelse(is.na(Mean.Hours), 0, Mean.Hours), 
+         Total.Hours = ifelse(is.na(Total.Hours), 0, Total.Hours), 
+         Perminance = ifelse(is.na(Perminance), 0, Perminance), 
+         Schedule = ifelse(is.na(Schedule), 0, Schedule), 
+         Calendar = ifelse(is.na(Calendar), 0, Calendar))
+
+dist.vecs <- df.spill[!is.na(df.spill$Dist),]$Dist
+
+df.spill %>% 
+  group_by(Dist.f) %>% 
+  summarise(n())
+
+
+
+## Find neighbors based on some circle around FQHC zip
+
+mm <- dist(zip.centroids[,2:3])
+mm <- as.matrix(mm) * 111.139
+
+mm.2 <- mm[zip.centroids$ZipCode %in% unique(df.spill$Zip),]
+
+mm.2 <- as.matrix((mm.2 < 50) + 0 )
+rowSums(mm.2)
+
+
+
+mm.3 <- c(CenterZip = 0, Year = 0, Competing.Sites = 0)
+for (g in 1:dim(mm.2)[1]){
+  mm.3 <- rbind(mm.3, cbind(CenterZip = zip.centroids[rownames(mm.2)[g],]$ZipCode, zip.centroids[names(mm.2[g,][which(as.vector(mm.2[g,] == 1))]),]) %>% 
+  left_join(uds.sites.full %>% filter(Year %in% c(2010:2021)) %>% group_by(Year, Zip) %>% summarise(Sites.Total = n()), by = c("ZipCode" = "Zip")) %>% 
+  left_join(df.spill %>% select(`BHCMIS ID`, Year, Zip, Sites), by = c("ZipCode" = "Zip", "Year")) %>% 
+  mutate(Sites.Total = ifelse(is.na(Sites.Total), 0, Sites.Total), 
+         Sites = ifelse(is.na(Sites), 0, Sites), 
+         Competing.Sites = Sites.Total - Sites) %>% 
+  filter(CenterZip != ZipCode) %>% 
+  group_by(CenterZip, Year) %>% 
+  summarise(Competing.Sites = sum(Competing.Sites)) %>% 
+    as.matrix())
+}
+
+mm.3 <- mm.3[-1,]
+
+#mm.100 <- mm.3 %>% data.frame() 
+#mm.60 <- mm.3 %>% data.frame() 
+#mm.50 <- mm.3 %>% data.frame() 
+#mm.20 <- mm.3 %>% data.frame() 
+#mm.10 <- mm.3 %>% data.frame() 
+
+#mm.3 <- mm.50 
+
+
+```
+
+
+## NumberofPatients and Total.Hours are the best cases, controlling for Sites
+```{r}
+
+
+ i <- 10
+  df.temp <- df.spill2[,c(1:5, 11, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
+  model_feols_clustered <- did2s(
+      data = df.temp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Sites | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    )
+  TEs <- data.frame(model_feols_clustered$coeftable)[1,]
+  TEs_Dist <- data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),]
+
+
+for (i in 12:15){
+  df.temp <- df.spill2[,c(1:5, 11, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
+  model_feols_clustered <- did2s(
+      data = df.temp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Sites | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    )
+  TEs <- rbind(TEs, data.frame(model_feols_clustered$coeftable)[1,])
+  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),])
+}
+  
+
+  
+  cbind(Outcome = c("Hours Per Week","Perminance","Weekly Schedule","Calendar Schedule","Total"),   TEs, TEs_Dist)
+```
+
+
+```{r}
+
+df.spill2 <- df.spill %>% 
+  left_join(mm.3 %>% data.frame() %>% mutate(Year = as.numeric(Year)), by = c("Zip" = "CenterZip","Year")) %>% 
+  mutate(Competing.Sites = as.numeric(ifelse(is.na(Competing.Sites), 0, Competing.Sites)), 
+         D = ifelse(Competing.Sites > 0, 1, 0))
+
+#length(unique(df.spill2[is.na(df.spill2$Dist),]$Zip))  #1893 or 1893 * 5
+
+set.seed(234)  #232
+df.spill2 <- df.spill2 %>% 
+  group_by(Zip) %>% 
+  mutate(Dist = ifelse(is.na(Dist), sample(dist.vecs, 1, replace = T), Dist), 
+                                  Att.viz = ifelse(Att == 0, rep(sample(c(2012:2021), 1, replace = T), each = 1), Att)) %>% 
+  mutate(Dist.rounded = as.factor(ceiling(Dist / 10))) 
+
+
+df.spill2 <- df.spill2 %>% 
+  ungroup() %>% 
+  #filter(MarketShare < median(MarketShare, na.rm = TRUE)) %>% 
+  select(`BHCMIS ID`, Tx, D, Att, Att.viz, Dist, Dist.rounded, Year, Zip, Total.Hours, Sites, Perminance, Schedule, Calendar, NumberofPatients) %>%
+  #inner_join(df.qual.exp %>% filter(Year == 2012) %>% mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% select(`BHCMIS ID`, ZipFilter), by = c("BHCMIS ID")) %>% 
+    select(Tx, D, Dist, Year, Zip, `BHCMIS ID`, Att, Att.viz, Dist.rounded, Total.Hours, Sites, Perminance, Schedule, Calendar, NumberofPatients) # %>% filter(ZipFilter == 2)
+
+  i <- 10
+  df.temp <- df.spill2[,c(1:5, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
+  model_feols_clustered <- feols(Outcome ~ Tx*as.numeric(Dist / 10) + D | Year + Zip, cluster = ~ Zip, data = df.temp)
+  TEs <- data.frame(model_feols_clustered$coeftable)[1,]
+  TEs_Dist <- data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),]
+
+
+for (i in 11:15){
+  df.temp <- df.spill2[,c(1:5, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
+  model_feols_clustered <- feols(Outcome ~ Tx*as.numeric(Dist / 10) + D | Year + Zip, cluster = ~ Zip, data = df.temp)
+  TEs <- rbind(TEs, data.frame(model_feols_clustered$coeftable)[1,])
+  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),])
+}
+
+
+
+p.spill <- df.spill2 %>% 
+  mutate(Treats = ifelse(Att == 0 & Year >=  Att.viz, 1, Tx)) %>% 
+  filter(Att > 0) %>% 
+  group_by(Dist.rounded, Treats) %>% 
+  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), NumberofPatients = mean(NumberofPatients, na.rm = TRUE), Total.Hours = mean(Total.Hours, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, NumberofPatients, Total.Hours)) %>% 
+  mutate(Sites = Sites_1 - Sites_0, 
+         NumberofPatients = NumberofPatients_1 - NumberofPatients_0, 
+         Total.Hours = Total.Hours_1 - Total.Hours_0) %>% 
+  left_join(df.spill2 %>% 
+  mutate(Treats = ifelse(Att == 0 & Year >= Att.viz, 1, Tx)) %>% 
+  filter(Att == 0) %>% 
+  group_by(Dist.rounded, Treats) %>% 
+  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), NumberofPatients = mean(NumberofPatients, na.rm = TRUE), Total.Hours = mean(Total.Hours, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, NumberofPatients, Total.Hours, Total.Hours)) %>% 
+  mutate(Sites.control = Sites_1 - Sites_0, 
+         NumberofPatients.control = NumberofPatients_1 - NumberofPatients_0, 
+         Total.Hours.control = Total.Hours_1 - Total.Hours_0) %>% 
+    select(Dist.rounded, Sites.control:Total.Hours.control), by = c("Dist.rounded")) %>% 
+  mutate( Locations = Sites - Sites.control, 
+         `Patients` = NumberofPatients - NumberofPatients.control, 
+         `Hours per Week` = Total.Hours - Total.Hours.control) %>% 
+  select(Dist.rounded:Counts_1, `Locations`:`Hours per Week`) %>% 
+  mutate(Dist.rounded = as.numeric(paste(Dist.rounded, 0, sep = ""))) %>% 
+  pivot_longer(cols = c( `Locations`:`Hours per Week`)) %>% 
+  mutate(`Treated Zips` = Counts_0 / 3) %>% 
+  ggplot(aes(x = Dist.rounded, y = value)) + geom_point(aes(size = `Treated Zips`)) + facet_wrap(~name, scales = "free_y", ncol = 2) + xlim(0, 200) + 
+  xlab("Kilometers to Competitive Zip") + ylab("Unadjusted Difference-in-differences") + theme_tufte_revised() + 
+  geom_smooth(method = "lm", se = F, quiet = TRUE, formula = "y ~ x", mapping = aes(weight = `Treated Zips`)) + 
+  geom_hline(yintercept=0, linetype = "dashed", color = "grey") + theme(text = element_text(size = 16)) + theme(title = element_text(face = "bold")) + 
+  ggtitle("Figure 4 - Unadjusted DID Estimates by Distance to Competitive Zip")
+
+
+
+suppressWarnings(print(p.spill))
+
+
+output <- cbind(TEs %>% 
+  mutate(`95% LB` = Estimate - `Std..Error` * 1.96, 
+         `95% UB` = Estimate + `Std..Error` * 1.96) %>% 
+    select(Estimate,`95% LB`, `95% UB`) , 
+
+TEs_Dist %>% 
+  mutate(`95% LB` = Estimate - `Std..Error` * 1.96, 
+         `95% UB` = Estimate + `Std..Error` * 1.96) %>% 
+    select(Estimate,`95% LB`, `95% UB`)) 
+rownames(output) <- c("Hours Per Week","Locations","Perminance","Weekly Schedule","Calendar Schedule","Total")
+
+
+
+round(output[c(6, 2,3, 1, 4, 5),], digits = 3) %>% 
+  kable("html", booktabs = T, col.names = c("DID Estimate", "95% LB", "95% UB", "DID Estimate", "95% LB", "95% UB")) %>%
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Patient Panel" = 1, "Extensive Margin" = 2, "Intensive Margin" = 3)) %>% 
+  add_header_above(c(" " = 1, "Treatment Effect" = 3, "Treatment Effect * Distance" = 3)) %>% 
+  add_footnote(c("Treatment Effect is the ATT estimated in the zip code where the rival opens their new location","Treatment Effect * Distance is the change in the ATT for every 10km an outlying zip code in the incumbent's service area is from the competitive zip "))
+
+```
 
