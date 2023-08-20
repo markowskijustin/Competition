@@ -814,47 +814,6 @@ mm.3 <- mm.3[-1,]
 ```
 
 
-## NumberofPatients and Total.Hours are the best cases, controlling for Sites
-```{r}
-
-
- i <- 10
-  df.temp <- df.spill2[,c(1:5, 11, i)]
-  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
-  model_feols_clustered <- did2s(
-      data = df.temp, 
-      yname = "Outcome", 
-      treatment = "Tx",
-        first_stage = ~ Sites | Zip + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
-        cluster_var = "Zip",
-      verbose = FALSE
-    )
-  TEs <- data.frame(model_feols_clustered$coeftable)[1,]
-  TEs_Dist <- data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),]
-
-
-for (i in 12:15){
-  df.temp <- df.spill2[,c(1:5, 11, i)]
-  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
-  model_feols_clustered <- did2s(
-      data = df.temp, 
-      yname = "Outcome", 
-      treatment = "Tx",
-        first_stage = ~ Sites | Zip + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
-        cluster_var = "Zip",
-      verbose = FALSE
-    )
-  TEs <- rbind(TEs, data.frame(model_feols_clustered$coeftable)[1,])
-  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),])
-}
-  
-
-  
-  cbind(Outcome = c("Hours Per Week","Perminance","Weekly Schedule","Calendar Schedule","Total"),   TEs, TEs_Dist)
-```
-
 
 ```{r}
 
@@ -924,7 +883,7 @@ p.spill <- df.spill2 %>%
   mutate(Dist.rounded = as.numeric(paste(Dist.rounded, 0, sep = ""))) %>% 
   pivot_longer(cols = c( `Locations`:`Hours per Week`)) %>% 
   mutate(`Treated Zips` = Counts_0 / 3) %>% 
-  ggplot(aes(x = Dist.rounded, y = value)) + geom_point(aes(size = `Treated Zips`)) + facet_wrap(~name, scales = "free_y", ncol = 2) + xlim(0, 200) + 
+  ggplot(aes(x = Dist.rounded, y = value)) + geom_point(aes(size = `Treated Zips`)) + facet_wrap(~name, scales = "free_y", ncol = 2) + xlim(0, 250) + 
   xlab("Kilometers to Competitive Zip") + ylab("Unadjusted Difference-in-differences") + theme_tufte_revised() + 
   geom_smooth(method = "lm", se = F, quiet = TRUE, formula = "y ~ x", mapping = aes(weight = `Treated Zips`)) + 
   geom_hline(yintercept=0, linetype = "dashed", color = "grey") + theme(text = element_text(size = 16)) + theme(title = element_text(face = "bold")) + 
@@ -956,4 +915,49 @@ round(output[c(6, 2,3, 1, 4, 5),], digits = 3) %>%
   add_footnote(c("Treatment Effect is the ATT estimated in the zip code where the rival opens their new location","Treatment Effect * Distance is the change in the ATT for every 10km an outlying zip code in the incumbent's service area is from the competitive zip "))
 
 ```
+
+
+
+
+## NumberofPatients and Total.Hours are the best cases, controlling for Sites
+```{r}
+
+
+ i <- 10
+  df.temp <- df.spill2[,c(1:5, 11, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
+  model_feols_clustered <- did2s(
+      data = df.temp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Sites | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    )
+  TEs <- data.frame(model_feols_clustered$coeftable)[1,]
+  TEs_Dist <- data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),]
+
+
+for (i in 12:15){
+  df.temp <- df.spill2[,c(1:5, 11, i)]
+  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
+  model_feols_clustered <- did2s(
+      data = df.temp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Sites | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    )
+  TEs <- rbind(TEs, data.frame(model_feols_clustered$coeftable)[1,])
+  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),])
+}
+  
+
+  
+  cbind(Outcome = c("Hours Per Week","Perminance","Weekly Schedule","Calendar Schedule","Total"),   TEs, TEs_Dist)
+```
+
 
