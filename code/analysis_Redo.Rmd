@@ -65,7 +65,7 @@ df.core <- dfc %>%
          htn.rate = htn.rate * 100, 
          dm.rate = dm.rate * 100) %>% 
   select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
-         Total,Qcomp, Altman, #MCD:COM, 
+         Total,Qcomp, Altman, Sites, #MCD:COM, 
          #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
          #Liquidity:NetWorth, 
          Pct.NHA:Pct.COM) #%>%  mutate(Altman = ifelse(is.infinite(Altman), NA, Altman))#, #pap.rate:dm.total, Liquidity:Altman) 
@@ -75,7 +75,7 @@ df.core <- dfc %>%
 
 did.core <- c(0, 0, 0, 0)
 
-for (j in 10:12){
+for (j in 10:13){
   
   df.temp <- df.core[,c(1:9, j, 13:ncol(df.core))]
   colnames(df.temp)[10] <- "Outcome"
@@ -83,15 +83,12 @@ for (j in 10:12){
       data = df.temp , 
       yname = "Outcome", 
       treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year, 
+        first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
-      verbose = FALSE
+      verbose = TRUE
     )
-  
   did.core <- rbind(did.core, outcomes$coeftable)
-  
-  
 }
 
 
@@ -106,12 +103,12 @@ df.core %>%
   mutate(Post = ifelse(year.rel >= 0, 1, 0), 
          Treated = ifelse(Att > 0, 1, 0)) %>% 
   group_by(Post, Treated) %>% 
-  select(Total:Altman) %>% 
+  select(Total:Sites) %>% 
   summarise_all(mean.nas) %>% 
   # summarise(Total = mean(Total, na.rm = TRUE), 
   #           Quality = mean(Qcomp, na.rm = TRUE), 
   #           Finances = mean(Altman, na.rm = TRUE)) %>% 
-  pivot_longer(cols = Total:Altman) %>% 
+  pivot_longer(cols = Total:Sites) %>% 
   mutate(value = round(value, 2)) %>% 
   #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
   pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
@@ -218,7 +215,11 @@ df.core %>%
 ```{r}
 
 #splits <- quantile(dfc[dfc$Year == 2011,]$ngla_net_gain_loss / dfc[dfc$Year == 2010,]$ngla_expense, c(0.5), na.rm = TRUE)
-splits <- quantile(dfc[dfc$year.rel == -1,]$ngla_net_gain_loss / dfc[dfc$year.rel == -1,]$ngla_expense, c(0.5), na.rm = TRUE)
+splits <- quantile(dfc[dfc$year.rel == -1,]$ngla_net_gain_loss / dfc[dfc$year.rel == -1,]$ngla_expense, c(0.25, 0.5, 0.75), na.rm = TRUE)
+
+
+
+splits <- c(mean(dfc[dfc$year.rel == -1,]$ngla_net_gain_loss / dfc[dfc$year.rel == -1,]$ngla_expense, na.rm = TRUE))
 
 df.profit <- dfc %>% 
   mutate(MCD = Total * Pct.MCD / 100, 
@@ -317,7 +318,7 @@ theme(panel.spacing = unit(1, "lines")) +
 #splits <- quantile(dfc[dfc$Year == 2011,]$Total, c(0.5), na.rm = TRUE)
 splits <- quantile(dfc[dfc$year.rel == -1,]$Total, c(0.5), na.rm = TRUE)
 
-
+splits <- mean.nas(dfc[dfc$year.rel == -1,]$Total)
 
 df.size <- dfc %>% 
   mutate(MCD = Total * Pct.MCD / 100, 
@@ -408,6 +409,105 @@ theme(panel.spacing = unit(1, "lines")) +
 
 ```
 
+
+
+
+## Effects startified by liquidity
+```{r}
+
+#splits <- quantile(dfc[dfc$Year == 2011,]$Total, c(0.5), na.rm = TRUE)
+splits <- quantile(dfc[dfc$year.rel == -1,]$quick_ratio, c(0.5), na.rm = TRUE)
+
+splits <- mean.nas(dfc[dfc$year.rel == -1,]$quick_ratio)
+
+df.liquid <- dfc %>% 
+  mutate(MCD = Total * Pct.MCD / 100, 
+         None = Total * Pct.None / 100, 
+         MCR = Total * Pct.MCR / 100, 
+         COM = Total * Pct.COM / 100, 
+         
+         crc.rate = crc.rate * 100, 
+         pap.rate = pap.rate * 100, 
+         childbmi.rate = childbmi.rate * 100, 
+         adultbmi.rate = adultbmi.rate * 100, 
+         htn.rate = htn.rate * 100, 
+         dm.rate = dm.rate * 100) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         Total, Qcomp, Altman, Pct.NHA:Pct.COM) %>%  
+  mutate(Altman = ifelse(is.infinite(Altman), NA, Altman)) %>% 
+  ungroup()#, #pap.rate:dm.total, Liquidity:Altman) 
+  
+df.liquid <- df.liquid %>% 
+  left_join(dfc %>% filter(Year == 2010) %>% select(ID, quick_ratio) %>% 
+  mutate(liquid = quick_ratio) , by = c("ID")) # %>% filter(`BHCMIS ID` %notin% c("010450","070430"))
+  
+
+splits1 <- c(min(df.liquid$liquid, na.rm = TRUE)-1, splits)
+splits2 <- c(splits, max(df.liquid$liquid, na.rm = TRUE))
+
+
+
+did.liquid <- c(0, 0, 0, 0)
+for (g in 1:(length(splits) + 1)){
+  for (j in 10:12){
+  
+  df.temp <- df.liquid[,c(1:9, j, 13:ncol(df.liquid))] 
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp %>% filter(liquid > splits1[g] & liquid <= splits2[g]), 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = FALSE
+    )
+  
+  did.liquid <- rbind(did.liquid, outcomes$coeftable)
+  
+}}
+
+
+did.liquid <- did.liquid[-1,]
+rownames(did.liquid) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+
+
+
+data.frame(Subset = sort(rep(1:(length(splits) + 1), 3)),
+      Outcome = rep(c("Total","Quality","Financial"), (length(splits) + 1)),
+      Estimate = as.numeric(did.liquid[,1]), 
+      SD = as.numeric(did.liquid[,2])) %>% 
+  mutate(Subset.f = as.factor(Subset)) %>% 
+  ggplot(aes(y = Subset.f, x = Estimate, xmin = Estimate - SD * 1.95, xmax = Estimate + SD * 1.95)) + 
+  geom_point() + 
+  xlab("Staggered 2-way DID Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #liquids based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(~Outcome, scales= "free_x", switch = 'y', space = "free_y") +  
+      theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",liquid=12, color="black"))+
+theme(panel.spacing = unit(1, "lines")) + 
+  ggtitle("DID Estimates by Baseline Liquidity")
+
+```
 
 
 
@@ -655,7 +755,7 @@ df.dist <- df.core %>%
 
 
 #splits <- quantile(dfc[dfc$Year == 2011,]$Total, c(0.5), na.rm = TRUE)
-splits <- quantile(df.dist[df.dist$year.rel == -1,]$Dist.random, c(0.5), na.rm = TRUE)
+splits <- quantile(df.dist[df.dist$year.rel == -1,]$Dist.random, c(0.33, 0.66), na.rm = TRUE)
 
 
 splits1 <- c(min(df.dist$Dist.random, na.rm = TRUE)-1, splits)
@@ -835,25 +935,9 @@ df.spill2 <- df.spill2 %>%
 df.spill2 <- df.spill2 %>% 
   ungroup() %>% 
   #filter(MarketShare < median(MarketShare, na.rm = TRUE)) %>% 
-  select(`BHCMIS ID`, Tx, D, Att, Att.viz, Dist, Dist.rounded, Year, Zip, Total.Hours, Sites, Perminance, Schedule, Calendar, NumberofPatients) %>%
+  select(`BHCMIS ID`, Tx, D, Att, Att.viz, Dist, Dist.rounded, Year, Zip, Total.Hours, Sites, Perminance, Schedule, Calendar, NumberofPatients:Private) %>%
   #inner_join(df.qual.exp %>% filter(Year == 2012) %>% mutate(ZipFilter = ifelse(`Surplus as a pct of before dep expenses` < 2, 1, 2)) %>% select(`BHCMIS ID`, ZipFilter), by = c("BHCMIS ID")) %>% 
-    select(Tx, D, Dist, Year, Zip, `BHCMIS ID`, Att, Att.viz, Dist.rounded, Total.Hours, Sites, Perminance, Schedule, Calendar, NumberofPatients) # %>% filter(ZipFilter == 2)
-
-  i <- 10
-  df.temp <- df.spill2[,c(1:5, i)]
-  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
-  model_feols_clustered <- feols(Outcome ~ Tx*as.numeric(Dist / 10) + D | Year + Zip, cluster = ~ Zip, data = df.temp)
-  TEs <- data.frame(model_feols_clustered$coeftable)[1,]
-  TEs_Dist <- data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),]
-
-
-for (i in 11:15){
-  df.temp <- df.spill2[,c(1:5, i)]
-  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
-  model_feols_clustered <- feols(Outcome ~ Tx*as.numeric(Dist / 10) + D | Year + Zip, cluster = ~ Zip, data = df.temp)
-  TEs <- rbind(TEs, data.frame(model_feols_clustered$coeftable)[1,])
-  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),])
-}
+    select(Tx, D, Dist, Year, Zip, `BHCMIS ID`, Att, Att.viz, Dist.rounded, Total.Hours, Sites, Perminance, Schedule, Calendar, NumberofPatients:Private) # %>% filter(ZipFilter == 2)
 
 
 
@@ -861,23 +945,32 @@ p.spill <- df.spill2 %>%
   mutate(Treats = ifelse(Att == 0 & Year >=  Att.viz, 1, Tx)) %>% 
   filter(Att > 0) %>% 
   group_by(Dist.rounded, Treats) %>% 
-  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), NumberofPatients = mean(NumberofPatients, na.rm = TRUE), Total.Hours = mean(Total.Hours, na.rm = TRUE)) %>% 
-  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, NumberofPatients, Total.Hours)) %>% 
+  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), 
+            NumberofPatients = mean(NumberofPatients, na.rm = TRUE), 
+            NumberofPatients_Medicaid = mean(Medicaid, na.rm = TRUE), 
+            Total.Hours = mean(Total.Hours, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, NumberofPatients, NumberofPatients_Medicaid, Total.Hours)) %>% 
   mutate(Sites = Sites_1 - Sites_0, 
          NumberofPatients = NumberofPatients_1 - NumberofPatients_0, 
+         NumberofPatients_Medicaid = NumberofPatients_Medicaid_1 - NumberofPatients_Medicaid_0, 
          Total.Hours = Total.Hours_1 - Total.Hours_0) %>% 
   left_join(df.spill2 %>% 
   mutate(Treats = ifelse(Att == 0 & Year >= Att.viz, 1, Tx)) %>% 
   filter(Att == 0) %>% 
   group_by(Dist.rounded, Treats) %>% 
-  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), NumberofPatients = mean(NumberofPatients, na.rm = TRUE), Total.Hours = mean(Total.Hours, na.rm = TRUE)) %>% 
-  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, NumberofPatients, Total.Hours, Total.Hours)) %>% 
+  summarise(Counts = n(), Sites = mean(Sites, na.rm = TRUE), 
+            NumberofPatients = mean(NumberofPatients, na.rm = TRUE), 
+            NumberofPatients_Medicaid = mean(Medicaid, na.rm = TRUE), 
+            Total.Hours = mean(Total.Hours, na.rm = TRUE))%>% 
+  pivot_wider(id_cols = Dist.rounded, names_from = Treats, values_from = c(Counts, Sites, NumberofPatients, NumberofPatients_Medicaid, Total.Hours)) %>% 
   mutate(Sites.control = Sites_1 - Sites_0, 
          NumberofPatients.control = NumberofPatients_1 - NumberofPatients_0, 
+         NumberofPatients_Medicaid.control = NumberofPatients_Medicaid_1 - NumberofPatients_Medicaid_0, 
          Total.Hours.control = Total.Hours_1 - Total.Hours_0) %>% 
     select(Dist.rounded, Sites.control:Total.Hours.control), by = c("Dist.rounded")) %>% 
   mutate( Locations = Sites - Sites.control, 
          `Patients` = NumberofPatients - NumberofPatients.control, 
+         `Patients - Medicaid` = NumberofPatients_Medicaid - NumberofPatients_Medicaid.control, 
          `Hours per Week` = Total.Hours - Total.Hours.control) %>% 
   select(Dist.rounded:Counts_1, `Locations`:`Hours per Week`) %>% 
   mutate(Dist.rounded = as.numeric(paste(Dist.rounded, 0, sep = ""))) %>% 
@@ -894,44 +987,31 @@ p.spill <- df.spill2 %>%
 suppressWarnings(print(p.spill))
 
 
-output <- cbind(TEs %>% 
-  mutate(`95% LB` = Estimate - `Std..Error` * 1.96, 
-         `95% UB` = Estimate + `Std..Error` * 1.96) %>% 
-    select(Estimate,`95% LB`, `95% UB`) , 
-
-TEs_Dist %>% 
-  mutate(`95% LB` = Estimate - `Std..Error` * 1.96, 
-         `95% UB` = Estimate + `Std..Error` * 1.96) %>% 
-    select(Estimate,`95% LB`, `95% UB`)) 
-rownames(output) <- c("Hours Per Week","Locations","Perminance","Weekly Schedule","Calendar Schedule","Total")
-
-
-
-round(output[c(6, 2,3, 1, 4, 5),], digits = 3) %>% 
-  kable("html", booktabs = T, col.names = c("DID Estimate", "95% LB", "95% UB", "DID Estimate", "95% LB", "95% UB")) %>%
-  kable_styling(latex_options = c("striped")) %>%
-  pack_rows(index = c("Patient Panel" = 1, "Extensive Margin" = 2, "Intensive Margin" = 3)) %>% 
-  add_header_above(c(" " = 1, "Treatment Effect" = 3, "Treatment Effect * Distance" = 3)) %>% 
-  add_footnote(c("Treatment Effect is the ATT estimated in the zip code where the rival opens their new location","Treatment Effect * Distance is the change in the ATT for every 10km an outlying zip code in the incumbent's service area is from the competitive zip "))
-
 ```
+
 
 
 
 
 ## NumberofPatients and Total.Hours are the best cases, controlling for Sites
 ```{r}
-
+df.spill3 <- df.spill2 %>% 
+  left_join(census %>% select(ZipCode, YEAR, IncomeBelowPoverty, PovertyStatusDet), by = c("Year" = "YEAR", "Zip" = "ZipCode"))#%>% 
+  # mutate(Poverty = IncomeBelowPoverty / PovertyStatusDet, 
+  #        Unemployed = Unemployed / Unemp_denom, 
+  #        Elderly = Age65andOver / TotalPop, 
+  #        Black = Black / TotalPop, 
+  #        Hispanic = Hispanic / TotalPop)
 
  i <- 10
-  df.temp <- df.spill2[,c(1:5, 11, i)]
-  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
+  df.temp <- df.spill3[,c(1:5, 11, i, 16:ncol(df.spill3))]
+  names(df.temp)[1:7] <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
   model_feols_clustered <- did2s(
       data = df.temp, 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Sites | Zip + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10)) ,
         cluster_var = "Zip",
       verbose = FALSE
     )
@@ -939,25 +1019,58 @@ round(output[c(6, 2,3, 1, 4, 5),], digits = 3) %>%
   TEs_Dist <- data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),]
 
 
-for (i in 12:15){
-  df.temp <- df.spill2[,c(1:5, 11, i)]
-  names(df.temp) <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
+for (i in 12:19){
+  df.temp <- df.spill3[,c(1:5, 11, i, 16:ncol(df.spill3))]
+  names(df.temp)[1:7] <- c("Tx", "D", "Dist", "Year", "Zip", "Sites", 'Outcome')
   model_feols_clustered <- did2s(
       data = df.temp, 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Sites | Zip + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10))  ,
+        second_stage = ~ i(Tx, ref = FALSE) + as.numeric(Dist / 10) + I(Tx *as.numeric(Dist / 10)),
         cluster_var = "Zip",
       verbose = FALSE
     )
   TEs <- rbind(TEs, data.frame(model_feols_clustered$coeftable)[1,])
-  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[nrow(model_feols_clustered$coeftable),])
+  TEs_Dist <- rbind(TEs_Dist, data.frame(model_feols_clustered$coeftable)[3,])
 }
   
 
   
-  cbind(Outcome = c("Hours Per Week","Perminance","Weekly Schedule","Calendar Schedule","Total"),   TEs, TEs_Dist)
+
+did.access.figures <- df.spill3 %>% 
+    mutate(Post = ifelse(Att.viz >= Year, 1, 0), 
+         Treated = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Post, Treated) %>% 
+  select(Total.Hours, Perminance:Private) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  pivot_longer(cols = Total.Hours:Private) %>% 
+  mutate(value = round(value, 2)) %>% 
+  #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
+  pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
+  mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
+  cbind(Outcome = c("Hours Per Week","Perminance","Weekly Schedule","Calendar Schedule","Total","Uninsured","Medicaid","Medicare","Private")) %>% 
+  select(Outcome, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted) %>% 
+  cbind(TEs %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`)) %>% 
+  cbind(TEs_Dist %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`))
+
+
+
+did.access.figures <- did.access.figures[c(5:9, 1, 3, 2, 4),]
+rownames(did.access.figures) <- NULL
+
+ did.access.figures %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","Estimate","95% CI")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Patients" = 5, "Intensive Margin" = 2, "Extensive Margin" = 2)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "TE" = 2,"TE * Distance" = 2))
+
 ```
+
+
+
 
 

@@ -117,24 +117,39 @@ uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes")[,c(1:4, 6, 5)]
 
 #new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
 
+uds.zip <- cbind(uds.zip, "Uninsured" = NA ,  "Medicaid" = NA, "Medicare" = NA, "Private" = NA)
+
 new.zip.names <- colnames(uds.zip)
 
+
+
 for(i in 2:length(locs)){
-  temp.zip <- read_excel(locs[i], sheet = "HealthCenterZipCodes")[,c(1:5, 10)]
+  temp.zip <- read_excel(locs[i], sheet = "HealthCenterZipCodes") #[,c(1:5, 10)]
     
-  colnames(temp.zip) <- new.zip.names
+  colnames(temp.zip) <- new.zip.names[c(1:5, 7:10, 6)]
   uds.zip <- rbind(uds.zip, temp.zip %>% mutate(ZipCode = str_pad(ZipCode, 5, pad = "0")))
 }
+
 
 
   
 uds.zip$ReportingYear <- as.numeric(uds.zip$ReportingYear)
 uds.zip$NumberofPatients <- as.numeric(uds.zip$NumberofPatients)
+uds.zip$Uninsured <- as.numeric(uds.zip$Uninsured)
+uds.zip$Medicaid <- as.numeric(uds.zip$Medicaid)
+uds.zip$Medicare <- as.numeric(uds.zip$Medicare)
+uds.zip$Private <- as.numeric(uds.zip$Private)
 
 uds.zip[is.na(uds.zip$NumberofPatients),]$NumberofPatients <- 0
+uds.zip[is.na(uds.zip$Uninsured) & uds.zip$ReportingYear > 2012,]$Uninsured <- 0
+uds.zip[is.na(uds.zip$Medicaid) & uds.zip$ReportingYear > 2012,]$Medicaid <- 0
+uds.zip[is.na(uds.zip$Medicare) & uds.zip$ReportingYear > 2012,]$Medicare <- 0
+uds.zip[is.na(uds.zip$Private) & uds.zip$ReportingYear > 2012,]$Private <- 0
 
 uds.zip <- uds.zip[uds.zip$ZipCodeType == "ZipCode",]
 
+
+uds.zip
 
 ```
 
@@ -391,7 +406,7 @@ for (i in 1:10){
                                      "B18135_001","B18135_007","B18135_012","B18135_018","B18135_023","B18135_029","B18135_034"), 
                        year = 2011 + i) %>% 
   pivot_wider(id_cols = c(GEOID, NAME), names_from = variable, values_from = estimate) %>% 
-    mutate(YEAR = 2009 + i, TotalPop = B01003_001, PovertyStatusDet = B17001_001, IncomeBelowPoverty = B17001_002,
+    mutate(YEAR = 2011 + i, TotalPop = B01003_001, PovertyStatusDet = B17001_001, IncomeBelowPoverty = B17001_002,
            AgeUnder18 = B01001_003 + B01001_004 + B01001_005 + B01001_006 + B01001_027 + B01001_028 + B01001_029 + B01001_030,
            Age18to64 = B01001_007 + B01001_008 + B01001_009 + B01001_010 + B01001_011 + B01001_013 + B01001_014 + B01001_015 + 
                        B01001_016 + B01001_017 + B01001_018 + B01001_019 + B01001_031 + B01001_032 + B01001_033 + B01001_034 +
@@ -1080,7 +1095,7 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   group_by(`BHCMIS ID`, Year) %>% 
   summarise(Clinics = max(Clinics)) %>% 
   pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
-  filter(`2010` == 1 & `2011` == 1 ) %>%   
+  filter(`2010` == 1 & `2011` == 1) %>%   
   #filter(`2014` == 1 & `2015` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
@@ -1134,6 +1149,7 @@ dfc <- dfc %>%
   mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100, 
                CostPerPat = ngla_expense / Total, 
                months_of_cash = as.numeric(months_of_cash),
+               quick_ratio = as.numeric(quick_ratio),
                Liquidity = (Assets - Liabilities) / Assets,
                Profitability = ngla_net_gain_loss / Assets, 
                Efficiency = ngla_revenue / Assets,
