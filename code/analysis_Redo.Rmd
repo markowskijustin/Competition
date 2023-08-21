@@ -995,8 +995,15 @@ suppressWarnings(print(p.spill))
 
 ## NumberofPatients and Total.Hours are the best cases, controlling for Sites
 ```{r}
+
+zipsize2 <- zctas(starts_with = unique(c(df.spill2$Zip)), year = 2010)
+
+
 df.spill3 <- df.spill2 %>% 
-  left_join(census %>% select(ZipCode, YEAR, IncomeBelowPoverty, PovertyStatusDet), by = c("Year" = "YEAR", "Zip" = "ZipCode"))#%>% 
+  left_join(census %>% select(ZipCode, YEAR, TotalPop, IncomeBelowPoverty, PovertyStatusDet), by = c("Year" = "YEAR", "Zip" = "ZipCode")) %>% 
+  left_join(zipsize2 %>% select(GEOID10, ALAND10), by = c("Zip" = "GEOID10")) %>% 
+  mutate(Area.SQmiles = ALAND10 / 2.59e6, 
+         l.popdensity = log(TotalPop / Area.SQmiles))
   # mutate(Poverty = IncomeBelowPoverty / PovertyStatusDet, 
   #        Unemployed = Unemployed / Unemp_denom, 
   #        Elderly = Age65andOver / TotalPop, 
@@ -1065,7 +1072,7 @@ rownames(did.access.figures) <- NULL
  did.access.figures %>% 
   kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","Estimate","95% CI")) %>% 
   kable_styling(latex_options = c("striped")) %>%
-  pack_rows(index = c("Patients" = 5, "Intensive Margin" = 2, "Extensive Margin" = 2)) %>% 
+  pack_rows(index = c("Patients" = 5, "Access" = 4)) %>% 
   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "TE" = 2,"TE * Distance" = 2))
 
 ```
