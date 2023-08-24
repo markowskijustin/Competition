@@ -30,7 +30,10 @@ library(tidyverse)
 
 
 ```{r}
-#dfc <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+# dfc <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+# uds.sites.full <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/sites_geocoded.csv")
+
+
 ```
 
 ## Balance between treated and controls
@@ -70,7 +73,7 @@ df.core <- dfc %>%
          #Liquidity:NetWorth, 
          Pct.NHA:Pct.COM) #%>%  mutate(Altman = ifelse(is.infinite(Altman), NA, Altman))#, #pap.rate:dm.total, Liquidity:Altman) 
   
-
+df.core2 <- df.core
 
 
 did.core <- c(0, 0, 0, 0)
@@ -83,7 +86,7 @@ for (j in 10:13){
       data = df.temp , 
       yname = "Outcome", 
       treatment = "Tx",
-        first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = TRUE
@@ -745,7 +748,7 @@ summary(lm(log(Density.Origin) ~ log(Density.NewZip), data = df.z.dist.plot))
 ## Primary effects by distance rival travelled
 ```{r}
 set.seed(123)
-df.dist <- df.core %>% 
+df.dist <- df.core2 %>% 
   left_join(df.z.dist.plot %>% select(`BHCMIS ID.y`, DistToClosestSite), by = c("BHCMIS ID" = "BHCMIS ID.y")) %>% 
   group_by(`BHCMIS ID`) %>% 
   mutate(Dist.random = sample(size = 1, unique(df.z.dist.plot$DistToClosestSite), replace = TRUE), 

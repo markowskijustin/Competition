@@ -374,6 +374,8 @@ uds.sites.full[is.na(uds.sites.full$Zip),]
 
 uds.sites.full %>% 
   arrange(`Total Weekly Hours Of Operation`, `Operational Schedule` )
+
+
 ```
 
 
@@ -1095,7 +1097,7 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   group_by(`BHCMIS ID`, Year) %>% 
   summarise(Clinics = max(Clinics)) %>% 
   pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
-  filter(`2010` == 1 & `2011` == 1) %>%   
+  filter(`2010` == 1 & `2011` == 1 ) %>%   
   #filter(`2014` == 1 & `2015` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
@@ -1147,6 +1149,8 @@ dfc <- comp.initial %>% filter(Expandor == 0) %>%
 
 dfc <- dfc %>% 
   mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100, 
+         Qcomp.w = (dm.rate * dm.total + htn.rate * htn.total + crc.rate * crc.denom + pap.rate * pap.denom + childbmi.rate * childbmi.denom + adultbmi.rate * adultbmi.denom ) / 
+           ( dm.total +  htn.total +  crc.denom +  pap.denom +  childbmi.denom +  adultbmi.denom ) * 100, 
                CostPerPat = ngla_expense / Total, 
                months_of_cash = as.numeric(months_of_cash),
                quick_ratio = as.numeric(quick_ratio),
@@ -1180,8 +1184,8 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
 
 ## Write the file
 ```{r}
-#write_csv(dfc, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
-
+# write_csv(dfc, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+# write.csv(uds.sites.full, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/sites_geocoded.csv")
 ```
 
 
