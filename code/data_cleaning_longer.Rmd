@@ -1082,7 +1082,7 @@ select(BHCMISID:FIPS, Total:Pct.COM, imm.rate:MinYear)
 
 
 clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
-  filter(Year >= included.years[1]) %>% 
+  #filter(Year >= included.years[1]) %>% 
   group_by(Zip, Year) %>%
   summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>%
   arrange(desc(Clinics))
