@@ -134,7 +134,7 @@ for (j in 10:12){
   df.temp <- df.core[,c(1:9, j, 13:ncol(df.core))]
   colnames(df.temp)[10] <- "Outcome"
   outcomes <- did2s(
-      data = df.temp , 
+      data = df.temp  , 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
@@ -798,6 +798,9 @@ p
 
 
 summary(lm(log(Density.Origin) ~ log(Density.NewZip), data = df.z.dist.plot))
+
+df.z.dist.plot %>% 
+  arrange(desc(DistToClosestSite))
 ```
 
 
