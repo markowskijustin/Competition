@@ -1097,7 +1097,7 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   group_by(`BHCMIS ID`, Year) %>% 
   summarise(Clinics = max(Clinics)) %>% 
   pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
-  filter(`2010` == 1 & `2011` == 1 ) %>%   
+  filter(`2010` == 1 & `2011` == 1  ) %>%   
   #filter(`2014` == 1 & `2015` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
@@ -1153,19 +1153,26 @@ dfc <- dfc %>%
            ( dm.total +  htn.total +  crc.denom +  pap.denom +  childbmi.denom +  adultbmi.denom ) * 100, 
                CostPerPat = ngla_expense / Total, 
                months_of_cash = as.numeric(months_of_cash),
+               ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
                quick_ratio = as.numeric(quick_ratio),
                Liquidity = (Assets - Liabilities) / Assets,
-               Profitability = ngla_net_gain_loss / Assets, 
-               Efficiency = ngla_revenue / Assets,
-               NetWorth = (Assets - Liabilities) / Liabilities)
+               Profitability = ngla_net_gain_loss / Assets, #Assets, 
+               Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities, 
+            Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
+            LiabPctAssets = Liabilities / Assets, 
+            Eff = ngla_prog_serv_revenue / Assets, 
+            LiabPctRev = ngla_prog_serv_revenue / ngla_expense)
 
 dfc <- dfc %>% 
   mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
          Profitability = ifelse(is.infinite(Profitability), NA, Profitability), 
          Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency), 
          NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
-         Altman = 6.56 * Liquidity + 3.26 * Profitability + 6.72 * Efficiency + 1.05 * NetWorth) %>% 
-  mutate(Att.random = ifelse(Att > 0, Att, NA)) 
+         #Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
+         Altman = 0.18 * quick_ratio + 0.3 * Profitability + 0.81 * Efficiency + 0.14 * NetWorth) %>% 
+  mutate(Att.random = ifelse(Att > 0, Att, NA), 
+         Distress = ifelse(Altman < 2.6, 1, 0))
 
 vec.atts <- rep(c(2012:2021), (table(comp.initial$Att) / 12)[-1])
 
