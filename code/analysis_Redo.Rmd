@@ -281,21 +281,22 @@ df.select.stint <- dfc %>%
          childbmi.denom = childbmi.denom / Total * 100, 
          htn.denom = htn.total / Total * 100, 
          dm.denom = dm.total / Total * 100) %>% 
-  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
-         HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
-         #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
-         #Liquidity:NetWorth, 
-         Pct.NHA:Pct.COM) %>% 
   mutate(Complexity = (HIV.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev) / 5, 
-         Intensity = (HIV.care + HeartDisease.care + Depression.care + Diabetes.care + Hypertension.care) / 5)
+         Intensity = (HIV.care + HeartDisease.care + Depression.care + Diabetes.care + Hypertension.care) / 5, 
+         Intensity.w = (HIV.care * HIV.prev + HepC.care * HepC.prev + Asthma.care * Asthma.prev + HeartDisease.care * HeartDisease.prev + Depression.care * Depression.prev + Diabetes.care * Diabetes.prev + Hypertension.care * Hypertension.prev) / 
+                  (HIV.prev+ HepC.prev + Asthma.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev)) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         Complexity, Intensity, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
+         Pct.NHA:Pct.COM)
+
   
 
 
 did.select.stint <- c(0, 0, 0, 0)
 
-for (j in 10:29){
+for (j in 10:11){
   
-  df.temp <- df.select.stint[,c(1:9, j, 30:ncol(df.select.stint))]
+  df.temp <- df.select.stint[,c(1:9, j, 12:ncol(df.select.stint))]
   colnames(df.temp)[10] <- "Outcome"
   outcomes <- did2s(
       data = df.temp  , 
@@ -321,20 +322,22 @@ p <- df.select.stint %>%
   mutate(Post = ifelse(year.rel >= 0, 1, 0), 
          Treated = ifelse(Att > 0, 1, 0)) %>% 
   group_by(Post, Treated) %>% 
-  select(HIV.prev:dm.denom) %>% 
+  select(Complexity:Intensity) %>% 
   summarise_all(mean.nas) %>% 
   # summarise(Total = mean(Total, na.rm = TRUE), 
   #           Quality = mean(Qcomp, na.rm = TRUE), 
   #           Finances = mean(Altman, na.rm = TRUE)) %>% 
-  pivot_longer(cols = HIV.prev:dm.denom) %>% 
+  pivot_longer(cols = Complexity:Intensity) %>% 
   mutate(value = round(value, 2)) %>% 
   #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
   pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
   mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
-  cbind(did.select.stint, group =   gsub(x = df.select.stint %>% 
-  select(HIV.prev:dm.denom) %>% 
-  colnames(), pattern = "^[[:alpha:]]+\\.", replacement = "")) %>% 
-  arrange(desc(group)) %>% 
+  cbind(did.select.stint) %>% 
+        
+  #       , group =   gsub(x = df.select.stint %>% 
+  # select(Complexity:Intensity) %>% 
+  # colnames(), pattern = "^[[:alpha:]]+\\.", replacement = "")) %>% 
+  # arrange(desc(group)) %>% 
    select(name, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
   mutate(Estimate = round(Estimate, 2), 
          `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
@@ -343,36 +346,31 @@ p <- df.select.stint %>%
   select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
   kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
   kable_styling(latex_options = c("striped")) %>%
-  pack_rows(index = c("Selection" = 7, "UDS Measure Denom" = 6, "Stinting" = 7)) %>% 
+  #pack_rows(index = c("Selection" = 7, "UDS Measure Denom" = 6, "Stinting" = 7)) %>% 
   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
 
 p
 
 
 
-
-
-did2s(
-      data = df.select.stint  , 
-      yname = "Complexity", 
-      treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE),
-        cluster_var = "STATE",
-      verbose = TRUE
-    )
-
-
-did2s(
-      data = df.select.stint  , 
-      yname = "Intensity", 
-      treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE),
-        cluster_var = "STATE",
-      verbose = TRUE
-    )
-
+p <- ggarrange(
+  event_study(data = df.select.stint, 
+  yname = "Complexity", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Complexity") , 
+event_study(data = df.select.stint, 
+  yname = "Intensity", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Intensity"), common.legend = TRUE ) 
+p
 
 ```
 
