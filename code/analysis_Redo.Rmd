@@ -187,10 +187,10 @@ df.core %>%
 ```{r}
 
 df.core <- dfc %>% 
-  mutate(MCD = Total * Pct.MCD / 100, 
-         None = Total * Pct.None / 100, 
-         MCR = Total * Pct.MCR / 100, 
-         COM = Total * Pct.COM / 100, 
+  mutate( MCD = Total * Pct.MCD / 100,
+         None = Total * Pct.None / 100,
+         MCR = Total * Pct.MCR / 100,
+         COM = Total * Pct.COM / 100,
          
          crc.rate = crc.rate * 100, 
          pap.rate = pap.rate * 100, 
@@ -261,6 +261,118 @@ df.core %>%
   kable_styling(latex_options = c("striped")) %>%
   pack_rows(index = c("Total Patients by Insurnace" = 4, "Quality Measure Components" = 6, "Financial Components" = 4)) %>% 
   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
+```
+
+
+
+## Panel Complexity and Intensity of Care
+```{r}
+
+df.select.stint <- dfc %>% 
+  mutate(MCD = Total * Pct.MCD / 100, 
+         None = Total * Pct.None / 100, 
+         MCR = Total * Pct.MCR / 100, 
+         COM = Total * Pct.COM / 100, 
+         
+         pap.denom = pap.denom / Total * 100, 
+         crc.denom = crc.denom / Total * 100, 
+         adultbmi.denom = adultbmi.denom / Total * 100, 
+         childbmi.denom = childbmi.denom / Total * 100, 
+         htn.denom = htn.total / Total * 100, 
+         dm.denom = dm.total / Total * 100) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
+         #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
+         #Liquidity:NetWorth, 
+         Pct.NHA:Pct.COM) %>% 
+  mutate(Complexity = (HIV.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev) / 5, 
+         Intensity = (HIV.care + HeartDisease.care + Depression.care + Diabetes.care + Hypertension.care) / 5)
+  
+
+
+did.select.stint <- c(0, 0, 0, 0)
+
+for (j in 10:29){
+  
+  df.temp <- df.select.stint[,c(1:9, j, 30:ncol(df.select.stint))]
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp  , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "STATE",
+      verbose = TRUE
+    )
+  did.select.stint <- rbind(did.select.stint, outcomes$coeftable)
+}
+
+
+did.select.stint <- did.select.stint[-1,]
+rownames(did.select.stint) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+p <- df.select.stint %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0), 
+         Treated = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Post, Treated) %>% 
+  select(HIV.prev:dm.denom) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  pivot_longer(cols = HIV.prev:dm.denom) %>% 
+  mutate(value = round(value, 2)) %>% 
+  #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
+  pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
+  mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
+  cbind(did.select.stint, group =   gsub(x = df.select.stint %>% 
+  select(HIV.prev:dm.denom) %>% 
+  colnames(), pattern = "^[[:alpha:]]+\\.", replacement = "")) %>% 
+  arrange(desc(group)) %>% 
+   select(name, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
+  mutate(Estimate = round(Estimate, 2), 
+         `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
+         `% Change` = round(Estimate / `1_0` * 100, 1)) %>% 
+  rename(Outcome = name) %>% 
+  select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Selection" = 7, "UDS Measure Denom" = 6, "Stinting" = 7)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
+p
+
+
+
+
+
+did2s(
+      data = df.select.stint  , 
+      yname = "Complexity", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "STATE",
+      verbose = TRUE
+    )
+
+
+did2s(
+      data = df.select.stint  , 
+      yname = "Intensity", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "STATE",
+      verbose = TRUE
+    )
+
 
 ```
 

@@ -1066,8 +1066,37 @@ df.comp <- df.comp %>%
 
 ## Remove some weird shit in CT
 df.comp <- df.comp %>% 
-  filter(BHCMISID != "01E00010") %>%  #%>%  filter(STATE != 'CT')
-select(BHCMISID:FIPS, Total:Pct.COM, imm.rate:MinYear)
+  filter(BHCMISID != "01E00010") %>% 
+                mutate(HIV.prev = T6A_L1AND2_CB / Total * 100, 
+         HIV.care = T6A_L1AND2_CA / T6A_L1AND2_CB,
+         
+         HepC.prev = T6A_L4B_CB / Total * 100,
+         HepC.care = T6A_L4B_CA / T6A_L4B_CB,
+
+         Asthma.prev = T6A_L5_CB / Total * 100,
+         Asthma.care = T6A_L5_CA / T6A_L5_CB,
+
+         # AbnormalPap.prev = T6A_L8_CB / Total * 100,
+         # AbnormalPap.care = T6A_L8_CA / T6A_L8_CB,
+         #
+         # ImmunizationsGiven.prev = T6A_L24_CB / Total * 100,
+         # ImmunizationsGiven.care = T6A_L24_CA / T6A_L24_CB,
+         
+         HeartDisease.prev = T6A_L10_CB / Total * 100, 
+         HeartDisease.care = T6A_L10_CA / T6A_L10_CB,
+         
+         # OverweightOrObesity.prev = T6A_L14A_CB / Total * 100, 
+         # OverweightOrObesity.care = T6A_L14A_CA / T6A_L14A_CB, 
+         
+         Depression.prev = T6A_L19A_CB / Total * 100, 
+         Depression.care = T6A_L19A_CA / T6A_L19A_CB, 
+         
+         Diabetes.prev = T6A_L9_CB / Total * 100, 
+         Diabetes.care = T6A_L9_CA / T6A_L9_CB, 
+         
+         Hypertension.prev = T6A_L11_CB / Total * 100, 
+         Hypertension.care = T6A_L11_CA / T6A_L11_CB) %>%  #%>%  filter(STATE != 'CT')
+select(BHCMISID:FIPS, Total:Pct.COM, HIV.prev:Hypertension.care , imm.rate:MinYear)
 
 
 
@@ -1162,7 +1191,7 @@ dfc <- dfc %>%
             Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
             LiabPctAssets = Liabilities / Assets, 
             Eff = ngla_prog_serv_revenue / Assets, 
-            LiabPctRev = ngla_prog_serv_revenue / ngla_expense)
+            LiabPctRev = ngla_prog_serv_revenue / ngla_expense) 
 
 dfc <- dfc %>% 
   mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
