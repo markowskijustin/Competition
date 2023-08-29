@@ -180,6 +180,34 @@ df.core %>%
   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
 
 
+
+p0 <- ggarrange(
+  event_study(data = df.core, 
+  yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients") , 
+event_study(data = df.core, 
+  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Quality Composite"), 
+event_study(data = df.core, 
+  yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience"), common.legend = TRUE ) 
+p0
+
 ```
 
 
@@ -318,7 +346,7 @@ mean.nas<- function(x){ mean(x, na.rm = TRUE)}
 
 options(scipen=999)
 
-p <- df.select.stint %>% 
+p1 <- df.select.stint %>% 
   mutate(Post = ifelse(year.rel >= 0, 1, 0), 
          Treated = ifelse(Att > 0, 1, 0)) %>% 
   group_by(Post, Treated) %>% 
@@ -349,11 +377,11 @@ p <- df.select.stint %>%
   #pack_rows(index = c("Selection" = 7, "UDS Measure Denom" = 6, "Stinting" = 7)) %>% 
   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
 
-p
+p1
 
 
 
-p <- ggarrange(
+p2 <- ggarrange(
   event_study(data = df.select.stint, 
   yname = "Complexity", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
@@ -370,7 +398,7 @@ event_study(data = df.select.stint,
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Intensity"), common.legend = TRUE ) 
-p
+p2
 
 ```
 
