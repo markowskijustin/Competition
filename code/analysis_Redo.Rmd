@@ -312,9 +312,11 @@ df.select.stint <- dfc %>%
   mutate(Complexity = (HIV.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev) / 5, 
          Intensity = (HIV.care + HeartDisease.care + Depression.care + Diabetes.care + Hypertension.care) / 5, 
          Intensity.w = (HIV.care * HIV.prev + HepC.care * HepC.prev + Asthma.care * Asthma.prev + HeartDisease.care * HeartDisease.prev + Depression.care * Depression.prev + Diabetes.care * Diabetes.prev + Hypertension.care * Hypertension.prev) / 
-                  (HIV.prev+ HepC.prev + Asthma.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev)) %>% 
+                  (HIV.prev+ HepC.prev + Asthma.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev), 
+         PatientsPerStaff = ngla_prog_serv_revenue / Total, #Total / Staff, 
+         ProgramCostPerPatient = log(ngla_expense / Total)) %>% 
   select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
-         Complexity, Intensity, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
+         Complexity, Intensity, PatientsPerStaff, ProgramCostPerPatient, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
          Pct.NHA:Pct.COM)
 
   
@@ -322,7 +324,7 @@ df.select.stint <- dfc %>%
 
 did.select.stint <- c(0, 0, 0, 0)
 
-for (j in 10:11){
+for (j in 10:12){
   
   df.temp <- df.select.stint[,c(1:9, j, 12:ncol(df.select.stint))]
   colnames(df.temp)[10] <- "Outcome"
@@ -350,12 +352,12 @@ p1 <- df.select.stint %>%
   mutate(Post = ifelse(year.rel >= 0, 1, 0), 
          Treated = ifelse(Att > 0, 1, 0)) %>% 
   group_by(Post, Treated) %>% 
-  select(Complexity:Intensity) %>% 
+  select(Complexity:PatientsPerStaff) %>% 
   summarise_all(mean.nas) %>% 
   # summarise(Total = mean(Total, na.rm = TRUE), 
   #           Quality = mean(Qcomp, na.rm = TRUE), 
   #           Finances = mean(Altman, na.rm = TRUE)) %>% 
-  pivot_longer(cols = Complexity:Intensity) %>% 
+  pivot_longer(cols = Complexity:PatientsPerStaff) %>% 
   mutate(value = round(value, 2)) %>% 
   #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
   pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
@@ -399,6 +401,8 @@ event_study(data = df.select.stint,
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Intensity"), common.legend = TRUE ) 
 p2
+
+
 
 
 ```
@@ -1203,7 +1207,9 @@ zipsize2 <- zctas(starts_with = unique(c(df.spill2$Zip)), year = 2010)
 
 
 df.spill3 <- df.spill2 %>% 
-  left_join(census %>% select(ZipCode, YEAR, TotalPop, IncomeBelowPoverty, PovertyStatusDet), by = c("Year" = "YEAR", "Zip" = "ZipCode")) %>% 
+  left_join(census %>% 
+              mutate(Unins.rate = Uninsured / Unins.denom) %>% 
+              select(ZipCode, YEAR, TotalPop, IncomeBelowPoverty, PovertyStatusDet, Unins.rate), by = c("Year" = "YEAR", "Zip" = "ZipCode")) %>% 
   left_join(zipsize2 %>% select(GEOID10, ALAND10), by = c("Zip" = "GEOID10")) %>% 
   mutate(Area.SQmiles = ALAND10 / 2.59e6, 
          l.popdensity = log(TotalPop / Area.SQmiles))
@@ -1278,9 +1284,117 @@ rownames(did.access.figures) <- NULL
   pack_rows(index = c("Patients" = 5, "Access" = 4)) %>% 
   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "TE" = 2,"TE * Distance" = 2))
 
+ 
+summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins.rate * df.spill3[df.spill3$Att > 0& df.spill3$Att.viz < df.spill3$Year,]$TotalPop)
+ 
+ 
 ```
 
 
 
+## Effect of Competition on Rival
+```{r}
+
+    
+df.rival <- dfc %>% 
+    left_join(df.z.dist.plot %>% select(`BHCMIS ID.x`, `BHCMIS ID.y`), by = c("BHCMIS ID" = "BHCMIS ID.y")) %>% 
+    filter(is.na(`BHCMIS ID.x`)) %>% 
+    unique() %>% 
+  bind_rows(dfc %>% 
+    left_join(df.z.dist.plot %>% select(`BHCMIS ID.x`, `BHCMIS ID.y`), by = c("BHCMIS ID" = "BHCMIS ID.y")) %>% 
+    filter(!is.na(`BHCMIS ID.x`)) %>% 
+    unique() %>% 
+    select(`BHCMIS ID.x`, `BHCMIS ID`:Year, Att, ID) %>% 
+    left_join(df.comp%>% 
+  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100, 
+         Qcomp.w = (dm.rate * dm.total + htn.rate * htn.total + crc.rate * crc.denom + pap.rate * pap.denom + childbmi.rate * childbmi.denom + adultbmi.rate * adultbmi.denom ) / 
+           ( dm.total +  htn.total +  crc.denom +  pap.denom +  childbmi.denom +  adultbmi.denom ) * 100, 
+               CostPerPat = ngla_expense / Total, 
+               months_of_cash = as.numeric(months_of_cash),
+               ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
+               quick_ratio = as.numeric(quick_ratio),
+               Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_net_gain_loss / Assets, #Assets, 
+               Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities, 
+            Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
+            LiabPctAssets = Liabilities / Assets, 
+            Eff = ngla_prog_serv_revenue / Assets, 
+            LiabPctRev = ngla_prog_serv_revenue / ngla_expense) , by = c("BHCMIS ID.x" = "BHCMISID", "Year"))) %>% 
+  mutate(MCD = Total * Pct.MCD / 100, 
+         None = Total * Pct.None / 100, 
+         MCR = Total * Pct.MCR / 100, 
+         COM = Total * Pct.COM / 100) %>% 
+    select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         Total,MCD:COM, Pct.MCD, Pct.None, Pct.MCR, Pct.COM, #MCD:COM, 
+         #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
+         #Liquidity:NetWorth, 
+         Pct.NHA:Pct.Homeless)
+  
+  
+
+did.rival <- c(0, 0, 0, 0)
+
+for (j in 10:18){
+  
+  df.temp <- df.rival[,c(1:9, j, 19:ncol(df.rival))]
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp  , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "STATE",
+      verbose = TRUE
+    )
+  did.rival <- rbind(did.rival, outcomes$coeftable)
+}
+
+
+did.rival <- did.rival[-1,]
+rownames(did.rival) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+df.rival %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0), 
+         Treated = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Post, Treated) %>% 
+  select(Total:Pct.COM) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  pivot_longer(cols = Total:Pct.COM) %>% 
+  mutate(value = round(value, 2)) %>% 
+  filter(name %in% c("Total", "MCD","None","MCR","COM","Pct.MCD", "Pct.None","Pct.MCR","Pct.COM")) %>% 
+  pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
+  mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
+  cbind(did.rival, NiceName = c("Total","Medicaid, total", "Uninsured, total","Medicare, total","Private, total","Medicaid, %", "Uninsured, %","Medicare, %","Private, %")) %>% 
+   select(NiceName, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
+  mutate(Estimate = round(Estimate, 2), 
+         `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
+         `% Change` = round(Estimate / `1_0` * 100, 1)) %>% 
+  rename(Outcome = NiceName) %>% 
+  select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Total Patients by Insurnace" = 5, "Payor Mix, Proportion" = 4)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
+event_study(data = df.competitor, 
+  yname = "Pct.None", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients")
+  
+  
+```
 
 
