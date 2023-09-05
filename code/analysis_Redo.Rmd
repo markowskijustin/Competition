@@ -107,6 +107,8 @@ annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clin
 ```{r}
 
 df.core <- dfc %>% 
+  #filter(Att %in% c(0, 2016:2021) & Year %in% c(2014:2021)) %>% 
+  #filter(Att %in% c(0, 2012:2015) & Year %in% c(2010:2018)) %>% 
   mutate(MCD = Total * Pct.MCD / 100, 
          None = Total * Pct.None / 100, 
          MCR = Total * Pct.MCR / 100, 
