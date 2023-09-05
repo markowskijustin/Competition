@@ -451,7 +451,7 @@ options(scipen=999)
 
 
 
-data.frame(Subset = sort(rep(1:3, 3)),
+data.frame(Subset = sort(rep(c("2012-2014","2015-2017","2018-2021"), 3)),
       Outcome = rep(c("Total","Quality","Financial"), 3),
       Estimate = as.numeric(did.ppACA[,1]), 
       SD = as.numeric(did.ppACA[,2])) %>% 
@@ -478,7 +478,7 @@ facet_grid(~Outcome, scales= "free_x", switch = 'y', space = "free_y") +
    theme(strip.placement = "outside") +
 #theme(text=element_text(family="Times",liquid=12, color="black"))+
 theme(panel.spacing = unit(1, "lines")) + 
-  ggtitle("DID Estimates by early vs late adopters")
+  ggtitle("DID Estimates by timeperiod of competitive shocks")
 
 ```
 
@@ -488,12 +488,14 @@ theme(panel.spacing = unit(1, "lines")) +
 
 ```{r}
 
-#splits <- quantile(dfc[dfc$Year == 2011,]$ngla_net_gain_loss / dfc[dfc$Year == 2010,]$ngla_expense, c(0.5), na.rm = TRUE)
-splits <- quantile(dfc[dfc$year.rel == -1,]$ngla_net_gain_loss / dfc[dfc$year.rel == -1,]$ngla_expense, c(0.25, 0.5, 0.75), na.rm = TRUE)
+
+#splits <- quantile(dfc[dfc$year.rel == -1,]$ngla_net_gain_loss / dfc[dfc$year.rel == -1,]$ngla_expense, c(0.333, 0.667), na.rm = TRUE)
 
 
 
 splits <- c(mean(dfc[dfc$year.rel == -1,]$ngla_net_gain_loss / dfc[dfc$year.rel == -1,]$ngla_expense, na.rm = TRUE))
+
+splits <- c(-0.03, 0.1)
 
 df.profit <- dfc %>% 
   mutate(MCD = Total * Pct.MCD / 100, 
@@ -519,7 +521,6 @@ df.profit <- df.profit %>%
 
 splits1 <- c(min(df.profit$pc, na.rm = TRUE)-1, splits)
 splits2 <- c(splits, max(df.profit$pc, na.rm = TRUE))
-
 
 
 did.profit <- c(0, 0, 0, 0)
@@ -557,8 +558,8 @@ plot.profit <- data.frame(Subset = sort(rep(1:(length(splits) + 1), 3)),
       Outcome = rep(c("Total","Quality","Financial"), (length(splits) + 1)),
       Estimate = as.numeric(did.profit[,1]), 
       SD = as.numeric(did.profit[,2])) %>% 
-  #mutate(Subset.f = as.factor(Subset)) %>% 
-  mutate(Subset.f = ifelse(Subset == 2, "Above Average", "Below Average")) %>% 
+  mutate(Subset.f = as.factor(Subset)) %>% 
+  #mutate(Subset.f = ifelse(Subset == 2, "Above Average", "Below Average")) %>% 
   ggplot(aes(y = Subset.f, x = Estimate, xmin = Estimate - SD * 1.95, xmax = Estimate + SD * 1.95)) + 
   geom_point() + 
   xlab("Staggered 2-way DID Estimates") + 
@@ -585,6 +586,17 @@ theme(panel.spacing = unit(1, "lines")) +
   ggtitle("DID Estimates by Baseline Profitiability")
 
 plot.profit
+
+
+did2s(
+      data = df.profit %>% filter(!is.na(pc)) %>% mutate(pc = pc * 10 ), 
+      yname = "Qcomp", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * pc) + I(Tx * pc^2),
+        cluster_var = "STATE",
+      verbose = FALSE
+    )
 ```
 
 
