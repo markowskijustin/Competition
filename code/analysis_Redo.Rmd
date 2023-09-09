@@ -586,18 +586,9 @@ theme(panel.spacing = unit(1, "lines")) +
   ggtitle("DID Estimates by Baseline Profitiability")
 
 plot.profit
-
-
-did2s(
-      data = df.profit %>% filter(!is.na(pc)) %>% mutate(pc = pc * 10 ), 
-      yname = "Qcomp", 
-      treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * pc) + I(Tx * pc^2) ,
-        cluster_var = "STATE",
-      verbose = FALSE
-    )
 ```
+
+
 
 
 
@@ -701,6 +692,34 @@ theme(panel.spacing = unit(1, "lines")) +
 ```
 
 
+
+
+
+## Stratified effects in linearized fashion
+```{r}
+
+did2s(
+      data = df.profit %>% mutate(pc = ngla_net_gain_loss / ngla_expense * 10) %>% filter(!is.na(pc)) , 
+      yname = "Qcomp", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * pc) + I(Tx * pc^2) ,
+        cluster_var = "STATE",
+      verbose = FALSE
+    )
+
+did2s(
+      data = df.size  %>% mutate(Size = Size / 1000 ), 
+      yname = "Qcomp", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * Size) + I(Tx * Size^2) ,
+        cluster_var = "STATE",
+      verbose = FALSE
+    )
+
+
+```
 
 
 ## Effects startified by liquidity
