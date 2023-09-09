@@ -618,7 +618,7 @@ df.size <- dfc %>%
   ungroup()#, #pap.rate:dm.total, Liquidity:Altman) 
   
 df.size <- df.size %>% 
-  left_join(dfc %>% filter(Year == 2010) %>% select(ID, Total) %>% 
+  left_join(dfc %>% filter(year.rel == -1) %>% select(ID, Total) %>% 
   mutate(Size = Total) , by = c("ID")) # %>% filter(`BHCMIS ID` %notin% c("010450","070430"))
   
 
@@ -694,34 +694,6 @@ theme(panel.spacing = unit(1, "lines")) +
 
 
 
-
-## Stratified effects in linearized fashion
-```{r}
-
-did2s(
-      data = df.profit %>% mutate(pc = ngla_net_gain_loss / ngla_expense * 10) %>% filter(!is.na(pc)) , 
-      yname = "Qcomp", 
-      treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * pc) + I(Tx * pc^2) ,
-        cluster_var = "STATE",
-      verbose = FALSE
-    )
-
-did2s(
-      data = df.size  %>% mutate(Size = Size / 1000 ), 
-      yname = "Qcomp", 
-      treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * Size) + I(Tx * Size^2) ,
-        cluster_var = "STATE",
-      verbose = FALSE
-    )
-
-
-```
-
-
 ## Effects startified by liquidity
 ```{r}
 
@@ -748,7 +720,7 @@ df.liquid <- dfc %>%
   ungroup()#, #pap.rate:dm.total, Liquidity:Altman) 
   
 df.liquid <- df.liquid %>% 
-  left_join(dfc %>% filter(Year == 2010) %>% select(ID, quick_ratio) %>% 
+  left_join(dfc %>% filter(year.rel == -1) %>% select(ID, quick_ratio) %>% 
   mutate(liquid = quick_ratio) , by = c("ID")) # %>% filter(`BHCMIS ID` %notin% c("010450","070430"))
   
 
@@ -822,6 +794,41 @@ theme(panel.spacing = unit(1, "lines")) +
 
 
 
+
+
+## Stratified effects in linearized fashion
+```{r}
+
+did2s(
+      data = df.profit %>% mutate(pc = ngla_net_gain_loss / ngla_expense * 10) %>% filter(!is.na(pc)) , 
+      yname = "Qcomp", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * pc) + I(Tx * pc^2) ,
+        cluster_var = "STATE",
+      verbose = FALSE
+    )
+
+did2s(
+      data = df.size  %>% mutate(Size = Size / 1000 ), 
+      yname = "Qcomp", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * Size) + I(Tx * Size^2) ,
+        cluster_var = "STATE",
+      verbose = FALSE
+    )
+
+did2s(
+      data = df.liquid %>% filter(!is.na(liquid)) , 
+      yname = "Qcomp", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * liquid) + I(Tx * liquid^2) ,
+        cluster_var = "STATE",
+      verbose = FALSE
+    )
+```
 
 
 
