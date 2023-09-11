@@ -1614,6 +1614,41 @@ df.p %>%
   group_by(ClinicType) %>% 
   select(Area.km2:popcenter.y) %>% 
   summarise_all(mean.nas)
+
+
+
+df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Rival") %>% 
+  mutate(DistRivaltoCenter = sqrt((xcoor - popcenter.x)^2 + (ycoor - popcenter.y)^2)) %>% 
+  #group_by(Zip) %>% 
+  summarise(Radius = mean.nas(Radius), DistRivaltoCenter = mean.nas(DistRivaltoCenter))
+
+df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Incumbent") %>% 
+  mutate(DistIncumbtoCenter = sqrt((xcoor - popcenter.x)^2 + (ycoor - popcenter.y)^2)) %>% 
+  #group_by(Zip) %>% 
+  summarise(Radius = mean.nas(Radius), DistIncumbtoCenter = mean.nas(DistIncumbtoCenter))
+
+
+
+
+df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Incumbent") %>%
+  select(Zip, xcoor, ycoor) %>% 
+  full_join(df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Rival") %>%
+  select(Zip, xcoor, ycoor), by = c("Zip")) %>% 
+  mutate(DistIncumbtoRival = sqrt((xcoor.x - xcoor.y)^2 + (ycoor.x - ycoor.y)^2)) %>% 
+  #group_by(Zip) %>% 
+  summarise(DistIncumbtoRival = mean.nas(DistIncumbtoRival))
+
+
+
+
 ```
 
 
