@@ -1512,3 +1512,111 @@ event_study(data = df.competitor,
 ```
 
 
+
+## Visualizing where the rival places there clinic
+```{r}
+df.places <- df.z.dist %>% 
+  select(Zip:`BHCMIS ID.y`) %>% 
+  pivot_longer(`BHCMIS ID.x`:`BHCMIS ID.y`) %>% 
+  mutate(ClinicType = ifelse(name == "BHCMIS ID.y", "Incumbent", "Rival")) %>% 
+  select(Zip, Year, Att.z, Total.z, ClinicType, value) %>% 
+  left_join(zip.centroids, by = c("Zip" = "ZipCode")) %>% 
+  left_join(uds.sites.full %>% filter(Year >= 2010) , by = c("value" = "BHCMIS ID","Zip")) 
+    
+    
+places.geo <- geo(street = df.places$`Site Street Address`, 
+             city = df.places$`Site City`, 
+             state = df.places$`Site State`, 
+             method = "census", 
+             full_results = TRUE)
+
+places.geo.3 <- geo(street = df.places$`Site Street Address 3`, 
+             city = df.places$`Site City`, 
+             state = df.places$`Site State`, 
+             method = "census", 
+             full_results = TRUE)
+
+df.places <- df.places %>% 
+  cbind(places.geo %>% select(lat, long, id) %>% rename(lat.1 = lat, long.1 = long)) %>% 
+  cbind(places.geo.3 %>% select(lat, long)) %>% 
+  mutate(lat = ifelse(is.na(lat.1), lat, lat.1), 
+         long = ifelse(is.na(long.1), long, long.1)) %>% 
+  select(Zip:Access, lat, long, id)
+  
+
+
+
+
+df.places[is.na(df.places$lat),] <- df.places[is.na(df.places$lat),] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Street Address" = "Site.Address")) %>%
+  mutate(lat = ifelse(is.na(lat), Geocoding.Artifact.Address.Primary.Y.Coordinate, lat), 
+         long = ifelse(is.na(long), Geocoding.Artifact.Address.Primary.X.Coordinate, long)) %>%
+  select(Zip:id) %>%
+  unique()
+
+
+df.places[is.na(df.places$lat),] <- df.places[is.na(df.places$lat),] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Name" = "Site.Name")) %>%
+  mutate(lat = ifelse(is.na(lat), Geocoding.Artifact.Address.Primary.Y.Coordinate, lat), 
+         long = ifelse(is.na(long), Geocoding.Artifact.Address.Primary.X.Coordinate, long)) %>%
+  select(Zip:id) %>%
+  unique()
+
+
+
+df.p <- df.places %>% 
+  select(Zip:Y, Year.y, long, lat) %>% 
+  left_join(zipsize %>% select(GEOID10, ALAND10, INTPTLON10, INTPTLAT10), by = c("Zip" = "GEOID10")) %>% 
+  mutate(Area.km2 = ALAND10 / 2.59e6 * 2.5889, 
+         Radius = sqrt(Area.km2 / pi), 
+         SquareSide = sqrt(Area.km2)) %>% 
+  mutate(INTPTLON10 = as.numeric(INTPTLON10), 
+         INTPTLAT10 = as.numeric(INTPTLAT10)) %>% 
+  mutate(DistToCenter = sqrt((long - INTPTLON10)^2 + (lat - INTPTLAT10)^2) * 111.139, 
+         xcoor = (long - INTPTLON10) * 111.139, 
+         ycoor = (lat -  INTPTLAT10) * 111.139, 
+         popcenter.x = (X - INTPTLON10) * 111.139, 
+         popcenter.y = (Y - INTPTLAT10) * 111.139)
+
+```
+
+
+## Scaled model of where Rival places their sites, not different from incumbent
+```{r}
+df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  group_by(ClinicType) %>% 
+  select(Area.km2:popcenter.y) %>% 
+  summarise_all(mean.nas)
+
+t.test(x = df.p[df.p$Year.y == df.p$Att.z & df.p$ClinicType == "Incumbent",]$xcoor, y = df.p[df.p$Year.y == df.p$Att.z & df.p$ClinicType == "Rival",]$xcoor)
+t.test(x = df.p[df.p$Year.y == df.p$Att.z & df.p$ClinicType == "Incumbent",]$ycoor, y = df.p[df.p$Year.y == df.p$Att.z & df.p$ClinicType == "Rival",]$ycoor)
+
+
+
+df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  mutate(xcoor = xcoor / Radius, 
+         ycoor = ycoor / Radius, 
+         popcenter.x = popcenter.x / Radius, 
+         popcenter.y = popcenter.y / Radius) %>% 
+  #filter(Zip == "95076") %>% 
+  ggplot(aes(x = xcoor, y = ycoor, color = ClinicType)) + 
+  #geom_rect(aes(xmin = -SquareSide / 2, xmax = SquareSide / 2, ymin = -SquareSide / 2, ymax = SquareSide / 2), fill = "blue", alpha = 0.2, color = NA) + 
+  geom_point(position=position_jitter(width=0.05, height=0.05)) + 
+  xlim(-2, 2) + ylim(-2, 2) 
+
+
+
+df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  group_by(ClinicType) %>% 
+  select(Area.km2:popcenter.y) %>% 
+  summarise_all(mean.nas)
+```
+
+
+
+
+
+
