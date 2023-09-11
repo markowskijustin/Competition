@@ -1600,11 +1600,12 @@ df.p %>%
          ycoor = ycoor / Radius, 
          popcenter.x = popcenter.x / Radius, 
          popcenter.y = popcenter.y / Radius) %>% 
-  #filter(Zip == "95076") %>% 
+  filter(Zip == "43604") %>%  #43604
   ggplot(aes(x = xcoor, y = ycoor, color = ClinicType)) + 
   #geom_rect(aes(xmin = -SquareSide / 2, xmax = SquareSide / 2, ymin = -SquareSide / 2, ymax = SquareSide / 2), fill = "blue", alpha = 0.2, color = NA) + 
-  geom_point(position=position_jitter(width=0.05, height=0.05)) + 
-  xlim(-2, 2) + ylim(-2, 2) 
+  geom_rect(aes(xmin = -1, xmax = 1, ymin = -1, ymax = 1), fill = "lightgrey", alpha = 0.2, color = NA) + 
+  geom_point(position=position_jitter(width=0.05, height=0.05)) + xlim(-2, 2) + ylim(-2, 2) + 
+  geom_point(aes(x = popcenter.x, y = popcenter.y), color = "green") #+ facet_wrap(~Zip)
 
 
 
