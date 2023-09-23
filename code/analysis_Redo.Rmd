@@ -25,6 +25,7 @@ library(readxl)
 library(did2s)
 library(tidyverse)
 library(directlabels)
+library(gtsummary)
 ```
 
 
@@ -43,7 +44,7 @@ dfc %>%
   filter(Year == 2010) %>% 
   mutate(Treat = ifelse(Att > 0, "Treated", "Control")) %>% 
   select(Treat, Total, Pct.NHA:Pct.COM) %>% 
-  filter(complete.cases(.)) %>% 
+  #filter(!complete.cases(.)) %>% 
   tbl_summary(by = Treat, 
                 statistic = list(all_continuous() ~ "{mean} ({sd})")) %>% 
   add_p()
