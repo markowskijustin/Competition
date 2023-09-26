@@ -1334,12 +1334,13 @@ df.spill3 <- df.spill2 %>% filter(NumberofPatients > 50) %>%
               select(ZipCode, YEAR, TotalPop, IncomeBelowPoverty, PovertyStatusDet, Unins.rate), by = c("Year" = "YEAR", "Zip" = "ZipCode")) %>% 
   left_join(zipsize2 %>% select(GEOID10, ALAND10), by = c("Zip" = "GEOID10")) %>% 
   mutate(Area.SQmiles = ALAND10 / 2.59e6, 
-         l.popdensity = log(TotalPop / Area.SQmiles))
-  # mutate(Poverty = IncomeBelowPoverty / PovertyStatusDet, 
-  #        Unemployed = Unemployed / Unemp_denom, 
-  #        Elderly = Age65andOver / TotalPop, 
-  #        Black = Black / TotalPop, 
-  #        Hispanic = Hispanic / TotalPop)
+         l.popdensity = log(TotalPop / Area.SQmiles)) %>% 
+  mutate(Poverty = IncomeBelowPoverty / PovertyStatusDet)
+# ,
+#          Unemployed = Unemployed / Unemp_denom,
+#          Elderly = Age65andOver / TotalPop,
+#          Black = Black / TotalPop,
+#          Hispanic = Hispanic / TotalPop)
 
  i <- 10
   df.temp <- df.spill3[,c(1:5, i, 16:ncol(df.spill3))]
@@ -1419,7 +1420,7 @@ summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins
 
 
 event_study(data = df.spill3, 
-  yname = "Medicaid", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
+  yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) <= 7) %>% 
   #filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
@@ -1446,7 +1447,7 @@ df.rival <- dfc %>%
     filter(!is.na(`BHCMIS ID.x`)) %>% 
     unique() %>% 
     select(`BHCMIS ID.x`, `BHCMIS ID`:Year, Att, ID) %>% 
-    left_join(df.comp%>% 
+    left_join(df.comp %>% 
   mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100, 
          Qcomp.w = (dm.rate * dm.total + htn.rate * htn.total + crc.rate * crc.denom + pap.rate * pap.denom + childbmi.rate * childbmi.denom + adultbmi.rate * adultbmi.denom ) / 
            ( dm.total +  htn.total +  crc.denom +  pap.denom +  childbmi.denom +  adultbmi.denom ) * 100, 
@@ -1461,7 +1462,14 @@ df.rival <- dfc %>%
             Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
             LiabPctAssets = Liabilities / Assets, 
             Eff = ngla_prog_serv_revenue / Assets, 
-            LiabPctRev = ngla_prog_serv_revenue / ngla_expense) , by = c("BHCMIS ID.x" = "BHCMISID", "Year"))) %>% 
+            LiabPctRev = ngla_prog_serv_revenue / ngla_expense, 
+         fs_contributions = as.numeric(fs_contributions), 
+         fs_program_service_revenue = as.numeric(fs_program_service_revenue), 
+         fs_other = as.numeric(fs_other), 
+         fs_miscellaneous = as.numeric(fs_miscellaneous), 
+         ngla_sales_revenue = as.numeric(ngla_sales_revenue), 
+         ngla_admin_expense = as.numeric(ngla_admin_expense), 
+         fringe_rate = as.numeric(fringe_rate)) , by = c("BHCMIS ID.x" = "BHCMISID", "Year"))) %>% 
   mutate(MCD = Total * Pct.MCD / 100, 
          None = Total * Pct.None / 100, 
          MCR = Total * Pct.MCR / 100, 
@@ -1472,7 +1480,7 @@ df.rival <- dfc %>%
          #Liquidity:NetWorth, 
          Pct.NHA:Pct.Homeless)
   
-  
+
 
 did.rival <- c(0, 0, 0, 0)
 
@@ -1481,7 +1489,7 @@ for (j in 10:18){
   df.temp <- df.rival[,c(1:9, j, 19:ncol(df.rival))]
   colnames(df.temp)[10] <- "Outcome"
   outcomes <- did2s(
-      data = df.temp  , 
+      data = df.temp %>% filter(!is.na(Tx)) , 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
@@ -1526,7 +1534,7 @@ df.rival %>%
   pack_rows(index = c("Total Patients by Insurnace" = 5, "Payor Mix, Proportion" = 4)) %>% 
   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
 
-event_study(data = df.competitor, 
+event_study(data = df.rival, 
   yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 7) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
