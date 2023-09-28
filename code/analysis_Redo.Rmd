@@ -1721,8 +1721,43 @@ df.p %>%
 
 
 
+ df.comp %>% 
+   mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100) %>% 
+  inner_join(df.p %>% select(ClinicType, value, Year.x) %>% unique(), by = c("BHCMISID" = "value", "Year" = "Year.x")) %>% 
+  ungroup() %>% 
+  select(ClinicType, Qcomp, Total) %>% 
+  tbl_summary(by = ClinicType, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
+  add_p()
 
+
+
+    
+    
+    df.z.dist %>% left_join(df.comp, by = c("BHCMIS ID.y" = "BHCMISID", "Year")) %>% 
+      mutate(Type = "Incumbent") %>% 
+      rbind(df.z.dist %>% left_join(df.comp, by = c("BHCMIS ID.x" = "BHCMISID", "Year")) %>% mutate(Type = "Rival")) %>% 
+        mutate(Quality = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100) %>% 
+      mutate(quick_ratio = as.numeric(quick_ratio),
+             Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_net_gain_loss / Assets, #Assets, 
+               Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities) %>% 
+      mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
+         Profitability = ifelse(is.infinite(Profitability), NA, Profitability), 
+         Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency), 
+         NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
+         #Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
+         Altman = 0.18 * quick_ratio + 0.3 * Profitability + 0.81 * Efficiency + 0.14 * NetWorth) %>% 
+      select(Type, Quality, Total, Altman) %>% 
+          tbl_summary(by = Type, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
+  add_p()
+        
 ```
+
+
+
 
 
 
