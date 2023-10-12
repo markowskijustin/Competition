@@ -34,13 +34,17 @@ library(tigris)
 
 
 ```{r}
-# dfc <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
-# uds.sites.full <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/sites_geocoded.csv")
-# clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
-#   #filter(Year >= included.years[1]) %>% 
-#   group_by(Zip, Year) %>%
-#   summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>%
-#   arrange(desc(Clinics))
+dfc <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+uds.sites.full <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/sites_geocoded.csv") %>%
+  mutate(Access = ifelse(`BHCMIS ID` == "080170" & as.numeric(`Total Weekly Hours Of Operation`) > 40000, 40, Access))
+clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
+  #filter(Year >= included.years[1]) %>%
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>%
+  arrange(desc(Clinics))
+
+uds.sites.full %>%
+  filter(is.na(Zip))
 ```
 
 ## Balance between treated and controls
@@ -417,6 +421,9 @@ p2
 
 
 ```
+
+
+
 
 
 ## Early vs Late competitors (pre-post ACA?)
@@ -868,14 +875,13 @@ dfc.new <- dfc %>%
                Qcomp:Altman)
       
 
-df.temp  
 
 
 did2s(
       data = dfc.new %>% 
-        inner_join(dfc %>% filter(Year == 2010 & Total < 14000 ) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
+        inner_join(dfc %>% filter(Year == 2010 & Total > 14000 ) #& ngla_net_gain_loss/ngla_revenue < 0.03)  ngla_net_gain_loss/Assets < 0.05
                    %>% select(ID, Pct.NHA:Pct.COM) %>% unique() , by = c("ID")) , 
-      yname = "Altman", 
+      yname = "Qcomp", 
       treatment = "Tx",
         first_stage = ~ 0 | ID + Year + Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + Pct.MCD + Pct.MCR + Pct.None, 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -1250,7 +1256,7 @@ df.spill2 <- df.spill %>%
 
 #length(unique(df.spill2[is.na(df.spill2$Dist),]$Zip))  #1893 or 1893 * 5
 
-set.seed(234)  #232
+set.seed(234)  #234
 df.spill2 <- df.spill2 %>% 
   group_by(Zip) %>% 
   mutate(Dist = ifelse(is.na(Dist), sample(dist.vecs, 1, replace = T), Dist), 
@@ -1302,7 +1308,8 @@ p.spill <- df.spill2 %>%
   mutate(Dist.rounded = as.numeric(paste(Dist.rounded, 0, sep = ""))) %>% 
   pivot_longer(cols = c( `Locations`:`Hours per Week`)) %>% 
   mutate(`Treated Zips` = Counts_0 / 3) %>% 
-  ggplot(aes(x = Dist.rounded, y = value)) + geom_point(aes(size = `Treated Zips`)) + facet_wrap(~name, scales = "free_y", ncol = 2) + xlim(0, 200) + 
+  filter(Dist.rounded < 210) %>% 
+  ggplot(aes(x = Dist.rounded, y = value)) + geom_point(aes(size = `Treated Zips`)) + facet_wrap(~name, scales = "free_y", ncol = 2) + #xlim(0, 200) + 
   xlab("Kilometers to Competitive Zip") + ylab("Unadjusted Difference-in-differences") + theme_tufte_revised() + 
   geom_smooth(method = "lm", se = F, quiet = TRUE, formula = "y ~ x", mapping = aes(weight = `Treated Zips`)) + 
   geom_hline(yintercept=0, linetype = "dashed", color = "grey") + theme(text = element_text(size = 16)) + theme(title = element_text(face = "bold")) + 
@@ -1335,6 +1342,7 @@ df.spill3 <- df.spill2 %>% filter(NumberofPatients > 50) %>%
   left_join(zipsize2 %>% select(GEOID10, ALAND10), by = c("Zip" = "GEOID10")) %>% 
   mutate(Area.SQmiles = ALAND10 / 2.59e6, 
          l.popdensity = log(TotalPop / Area.SQmiles)) %>% 
+  #mutate(Sites = log(Sites + 1)) %>% 
   mutate(Poverty = IncomeBelowPoverty / PovertyStatusDet) #%>% filter(Zip != '04401')
 # ,
 #          Unemployed = Unemployed / Unemp_denom,
@@ -1416,17 +1424,53 @@ did.access.figures[,c(1, 7:10)] %>%
 
  
 summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins.rate * df.spill3[df.spill3$Att > 0& df.spill3$Att.viz < df.spill3$Year,]$TotalPop)
- 
 
 
-event_study(data = df.spill3, 
-  yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
-  filter(abs(term) <= 7) %>% 
-  #filter(estimator %in% c("Gardner (2021)")) %>% 
+
+
+```
+
+
+## Event study plots
+```{r}
+
+
+ev.pop1 <- event_study(data = df.spill3, 
+  yname = "Medicaid", idname = "Zip", tname = "Year", gname = "Att", estimator = "did2s") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients")
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Medicaid")
+ev.pop2 <- event_study(data = df.spill3, 
+  yname = "Medicare", idname = "Zip", tname = "Year", gname = "Att", estimator = "did2s") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Medicare")
+ev.pop3 <- event_study(data = df.spill3, 
+  yname = "Uninsured", idname = "Zip", tname = "Year", gname = "Att", estimator = "did2s") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Uninsured")
+ev.pop4 <- event_study(data = df.spill3, 
+  yname = "Private", idname = "Zip", tname = "Year", gname = "Att", estimator = "did2s") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Private")
+
+ggarrange(ev.pop1, ev.pop2, ev.pop3, ev.pop4, common.legend = TRUE, ncol = 1)
+
+
 ```
 
 
@@ -1434,15 +1478,15 @@ event_study(data = df.spill3,
 
 ## Access by quantile
 ```{r}
-qnats1 <- c(0, 0.2, 0.4, 0.6, 0.8)
-qnats2 <- c(0.2, 0.4, 0.6, 0.8, 1)
+qnats1 <- seq(0, 0.75, by = 0.25)
+qnats2 <- seq(0.25, 1, by = 0.25)
 
-qnats1 <- seq(0, 0.8, by = 0.2)
-qnats2 <- seq(0.2, 1, by = 0.2)
+
+
  
    model.dist.quants <-  did2s(
-      data = df.spill3 %>% filter(Dist > quantile(Dist, qnats1[1]) & Dist < quantile(Dist, qnats2[1])), 
-      yname = "Total.Hours", 
+      data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)), 
+      yname = "Sites", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1452,10 +1496,10 @@ qnats2 <- seq(0.2, 1, by = 0.2)
     TEs <- data.frame(model.dist.quants$coeftable)[1,]
     
     
-  for (i in 2:5){
+  for (i in 1:4){
       model.dist.quants <-  did2s(
-      data = df.spill3 %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist < quantile(Dist, qnats2[i])), 
-      yname = "Total.Hours", 
+      data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i]))%>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
+      yname = "SL", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1467,7 +1511,67 @@ qnats2 <- seq(0.2, 1, by = 0.2)
     
     TEs
     
-    df.spill3 %>% filter(Zip != '04401')
+    
+zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.8)), 
+  yname = "Sites", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Sites in Farthest 20% of Zips")
+
+
+
+zp2 <- event_study(data = df.spill3 %>% filter(Dist == 0), 
+  yname = "Sites", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Sites in Competitive Zip")
+
+
+zp3 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.8)) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
+  yname = "Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Hours in Farthest 20% of Zips")
+
+
+
+zp4 <- event_study(data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
+  yname = "Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
+  filter(abs(term) < 7) %>% 
+  filter(estimator %in% c("Gardner (2021)")) %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Hours in Competitive Zip")
+
+
+
+zp <- ggarrange(zp1, zp2, zp3, zp4, common.legend = TRUE)
+zp
+
+did2s(
+      data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
+      yname = "Total.Hours", 
+      treatment = "Tx",
+        first_stage = ~ 1 | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    ) 
+
+df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% 
+  group_by(Tx) %>% 
+  summarise(mean(Sites))
+
 ```
 
 
@@ -1695,14 +1799,14 @@ df.p %>%
   filter(ClinicType == "Rival") %>% 
   mutate(DistRivaltoCenter = sqrt((xcoor - popcenter.x)^2 + (ycoor - popcenter.y)^2)) %>% 
   #group_by(Zip) %>% 
-  summarise(Radius = mean.nas(Radius), DistRivaltoCenter = mean.nas(DistRivaltoCenter))
+  summarise(Radius = mean.nas(Radius), SD = sd(DistRivaltoCenter, na.rm = TRUE), DistRivaltoCenter = mean.nas(DistRivaltoCenter))
 
 df.p %>% 
   filter(Year.y == Att.z) %>% 
   filter(ClinicType == "Incumbent") %>% 
   mutate(DistIncumbtoCenter = sqrt((xcoor - popcenter.x)^2 + (ycoor - popcenter.y)^2)) %>% 
   #group_by(Zip) %>% 
-  summarise(Radius = mean.nas(Radius), DistIncumbtoCenter = mean.nas(DistIncumbtoCenter))
+  summarise(Radius = mean.nas(Radius), SD = sd(DistIncumbtoCenter, na.rm = TRUE), DistIncumbtoCenter = mean.nas(DistIncumbtoCenter))
 
 
 
@@ -1717,7 +1821,7 @@ df.p %>%
   select(Zip, xcoor, ycoor), by = c("Zip")) %>% 
   mutate(DistIncumbtoRival = sqrt((xcoor.x - xcoor.y)^2 + (ycoor.x - ycoor.y)^2)) %>% 
   #group_by(Zip) %>% 
-  summarise(DistIncumbtoRival = mean.nas(DistIncumbtoRival))
+  summarise(SD = sd(DistIncumbtoRival, na.rm = TRUE), DistIncumbtoRival = mean.nas(DistIncumbtoRival))
 
 
 
@@ -1754,6 +1858,7 @@ df.p %>%
                 statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
   add_p()
         
+    
 ```
 
 
