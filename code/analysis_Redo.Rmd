@@ -1572,6 +1572,9 @@ df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, 
   group_by(Tx) %>% 
   summarise(mean(Sites))
 
+
+
+
 ```
 
 
@@ -1685,6 +1688,9 @@ event_study(data = df.rival,
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients")
   
+
+
+summary(lm(data = df.temp %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Outcome ~ Treated*year.rel))
   
 ```
 
