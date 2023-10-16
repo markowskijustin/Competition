@@ -29,6 +29,7 @@ library(gtsummary)
 library(kableExtra)
 library(ggpubr)
 library(tigris)
+library(usmap)
 ```
 
 
@@ -209,27 +210,27 @@ p0 <- ggarrange(
   event_study(data = df.core, 
   yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
-  filter(estimator == "Gardner (2021)") %>% 
+  #filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients") , 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients") + xlab("Year Relative to Competitive Shock") + ylab("Number of Patients"), 
 event_study(data = df.core, 
   yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
-  filter(estimator == "Gardner (2021)") %>% 
+  #filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Quality Composite"), 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Quality Composite")+ xlab("Year Relative to Competitive Shock") + ylab("Percentage Points"), 
 event_study(data = df.core, 
   yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
-  filter(estimator == "Gardner (2021)") %>% 
+  #filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience"), common.legend = TRUE, nrow = 1 ) 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience") + xlab("Year Relative to Competitive Shock") + ylab("Risk Units"), common.legend = TRUE, nrow = 1 ) 
 p0
 
 
@@ -1205,7 +1206,7 @@ df.z.dist.plot %>%
 
 
 p <- df.z.dist.plot %>% 
-  filter(DistToClosestSite < 200) %>% 
+  filter(DistToClosestSite > 25) %>% 
   ggplot(aes(x = log(Density.Origin), y = log(Density.NewZip))) + 
   geom_point(aes(size = DistToClosestSite, colour = DistToClosestSite)) + 
   scale_colour_gradientn(colours = c("green","lightblue","purple"),
@@ -1223,90 +1224,6 @@ df.z.dist.plot %>%
   arrange(desc(DistToClosestSite))
 ```
 
-
-
-
-## Primary effects by distance rival travelled
-```{r}
-set.seed(123)
-df.dist <- df.core2 %>% 
-  left_join(df.z.dist.plot %>% select(`BHCMIS ID.y`, DistToClosestSite, Density.NewZip), by = c("BHCMIS ID" = "BHCMIS ID.y")) %>% 
-  group_by(`BHCMIS ID`) %>% 
-  mutate(Dist.random = sample(size = 1, unique(df.z.dist.plot$DistToClosestSite / df.z.dist.plot$Density.NewZip), replace = TRUE), 
-         Dist.random = ifelse(Att > 0, DistToClosestSite / Density.NewZip, Dist.random))
-
-
-
-
-#splits <- quantile(dfc[dfc$Year == 2011,]$Total, c(0.5), na.rm = TRUE)
-splits <- quantile(df.dist[df.dist$year.rel == -1,]$Dist.random, c(0.5), na.rm = TRUE)
-
-
-splits1 <- c(min(df.dist$Dist.random, na.rm = TRUE)-1, splits)
-splits2 <- c(splits, max(df.dist$Dist.random, na.rm = TRUE))
-
-
-
-did.dist <- c(0, 0, 0, 0)
-for (g in 1:(length(splits) + 1)){
-  for (j in 10:12){
-  
-  df.temp <- df.dist[,c(1:9, j, 13:ncol(df.dist))] 
-  colnames(df.temp)[10] <- "Outcome"
-  outcomes <- did2s(
-      data = df.temp %>% filter(Dist.random > splits1[g] & Dist.random <= splits2[g]), 
-      yname = "Outcome", 
-      treatment = "Tx",
-        first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE),
-        cluster_var = "STATE",
-      verbose = FALSE
-    )
-  
-  did.dist <- rbind(did.dist, outcomes$coeftable)
-  
-}}
-
-
-did.dist <- did.dist[-1,]
-rownames(did.dist) <- NULL
-
-mean.nas<- function(x){ mean(x, na.rm = TRUE)}
-
-options(scipen=999)
-
-
-
-
-data.frame(Subset = sort(rep(1:(length(splits) + 1), 3)),
-      Outcome = rep(c("Total","Quality","Financial"), (length(splits) + 1)),
-      Estimate = as.numeric(did.dist[,1]), 
-      SD = as.numeric(did.dist[,2])) %>% 
-  mutate(Subset.f = as.factor(Subset)) %>% 
-  ggplot(aes(y = Subset.f, x = Estimate, xmin = Estimate - SD * 1.95, xmax = Estimate + SD * 1.95)) + 
-  geom_point() + 
-  xlab("Staggered 2-way DID Estimates") + 
-ylab(NULL) + 
-#adds the CIs
-geom_errorbarh(height=.1) +
-
-#sets the scales
-#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
-#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
-#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
-
-#adding a vertical line at the effect = 0 mark
-geom_vline(xintercept=0, color="black", linetype="dashed", alpha=.5)+
-
-#faceting based on my subgroups
-  #facet_wrap(~X1) +
-facet_grid(~Outcome, scales= "free_x", switch = 'y', space = "free_y") +  
-      theme_tufte_revised()+
-   theme(strip.placement = "outside") +
-#theme(text=element_text(family="Times",size=12, color="black"))+
-theme(panel.spacing = unit(1, "lines")) + 
-  ggtitle("DID Estimates by Distance Traveled")
-```
 
 
 
@@ -1496,7 +1413,8 @@ df.spill3 <- df.spill2 %>% filter(NumberofPatients > 50 ) %>%
   mutate(Area.SQmiles = ALAND10 / 2.59e6, 
          l.popdensity = log(TotalPop / Area.SQmiles)) %>% 
   #mutate(Sites = log(Sites + 1)) %>% 
-  mutate(Poverty = IncomeBelowPoverty / PovertyStatusDet) #%>% filter(NumberofPatients > 100 | NumberofPatients / TotalPop > 0.01)
+  mutate(Poverty = IncomeBelowPoverty / PovertyStatusDet) %>% 
+  mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites))#%>% filter(NumberofPatients > 100 | NumberofPatients / TotalPop > 0.01)
 
 #%>% filter(Zip != '04401')
 # ,
@@ -1538,7 +1456,7 @@ for (i in 11:19){
 }
   
 
-  
+
 
 did.access.figures <- df.spill3 %>% 
     mutate(Post = ifelse(Att.viz >= Year, 1, 0), 
@@ -1711,6 +1629,7 @@ zp4 <- event_study(data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ife
 
 
 zp <- ggarrange(zp1, zp2, zp3, zp4, common.legend = TRUE)
+zp <- ggarrange(zp3, zp4, common.legend = TRUE)
 zp
 
 did2s(
@@ -1890,6 +1809,9 @@ summary(lm(data = df.rival %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Trea
 
 
 
+
+
+
 ## Visualizing where the rival places there clinic
 ```{r}
 df.places <- df.z.dist %>% 
@@ -1955,7 +1877,43 @@ df.p <- df.places %>%
          popcenter.x = (X - INTPTLON10) * 111.139, 
          popcenter.y = (Y - INTPTLAT10) * 111.139)
 
+
+p.rival.dist <- df.z.dist %>% 
+  arrange(DistToClosestSite) %>% 
+    ggplot(aes(x=DistToClosestSite)) + geom_histogram(binwidth = 1, fill="lightgrey", color="white") + xlim(0,150) + 
+  #ylim(0, 25) + 
+   #scale_x_log10(name = 'Number of planned tours', breaks=c(1,5,10,50,100,200))+
+   stat_bin(aes(y=cumsum(..count..)/10), binwidth = 1, geom="line",color="blue") + 
+   scale_y_continuous(name = 'Number of Rivals', sec.axis = sec_axis(~./81*1000, name = "Cummulative percentage (%)")) + 
+  theme_tufte_revised() + ggtitle("FQHC Rivals by Distance from Service Area to New Competitive Zip") + xlab("Distance Travelled (km)")
+
+p.rival.dist
+
+
+
+
 ```
+
+## Map of where competitive zip codes are
+
+```{r}
+
+
+#eq_transformed <- usmap_transform(earthquakes)
+
+eq_transformed <- usmap_transform(df.z.dist %>% 
+  left_join(zip.centroids %>% rename(lon = X, lat = Y) , by = c("Zip" = "ZipCode"))) %>% 
+  mutate(`Distance Travelled` = ifelse(DistToClosestSite > 25, ">25km", "<25km"))
+
+
+plot_usmap() +
+  geom_point(data = eq_transformed, aes(x = x, y = y, color = `Distance Travelled`)) +
+  labs(title = "Competitive Zip Codes",
+       subtitle = "By Distance Traveled by Rival") +
+  theme(legend.position = "right")
+```
+
+
 
 
 ## Scaled model of where Rival places their sites, not different from incumbent
@@ -1981,8 +1939,8 @@ df.p %>%
   ggplot(aes(x = xcoor, y = ycoor, color = ClinicType)) + 
   #geom_rect(aes(xmin = -SquareSide / 2, xmax = SquareSide / 2, ymin = -SquareSide / 2, ymax = SquareSide / 2), fill = "blue", alpha = 0.2, color = NA) + 
   geom_rect(aes(xmin = -1, xmax = 1, ymin = -1, ymax = 1), fill = "lightgrey", alpha = 0.2, color = NA) + 
-  geom_point(position=position_jitter(width=0.05, height=0.05)) + xlim(-2, 2) + ylim(-2, 2) + 
-  geom_point(aes(x = popcenter.x, y = popcenter.y), color = "green") + facet_wrap(~Zip)
+  geom_point(position=position_jitter(width=0.05, height=0.05)) + xlim(-2, 2) + ylim(-2, 2) #+ 
+  #geom_point(aes(x = popcenter.x, y = popcenter.y), color = "green") #+ facet_wrap(~Zip)
 
 
 
@@ -2053,7 +2011,7 @@ df.p %>%
          NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
          #Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
          Altman = 0.18 * quick_ratio + 0.3 * Profitability + 0.81 * Efficiency + 0.14 * NetWorth) %>% 
-      select(Type, Quality, Total, Altman) %>% 
+      select(Type, Quality, Total, Altman, Pct.NHA:Pct.COM) %>% 
           tbl_summary(by = Type, 
                 statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
   add_p()
