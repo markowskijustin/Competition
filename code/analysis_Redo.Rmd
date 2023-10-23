@@ -240,6 +240,137 @@ summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treat
 ```
 
 
+
+## Resources to support utilization
+
+```{r}
+
+
+
+df.util <- dfc %>% 
+  inner_join(uds.sites.full %>% 
+             filter(`Location Setting` %in% c("All Other Clinic Types","School") | is.na(`Location Setting`)) %>% 
+              #filter(`Location Setting` %in% c("All Other Clinic Types","School")) %>% 
+              mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
+                                ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
+                     Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
+                                ifelse(`Operational Schedule` == "Part-Time", 0.5, 0)),
+                     Calendar = ifelse(`Calendar Schedule` == "Year-Round", 1,
+                                ifelse(`Calendar Schedule` == "Seasonal", 0.5, 0))) %>% 
+              group_by(`BHCMIS ID`, Year) %>% 
+              summarise(Sites = n_distinct(`Site Name`), Mean.Hours = mean(Access, na.rm = TRUE), Total.Hours = sum(Access, na.rm = TRUE), 
+                        Perminance = sum(Type.num, na.rm = TRUE), Schedule = sum(Schedule, na.rm = TRUE), Calendar = sum(Calendar, na.rm = TRUE)) %>% 
+                mutate(Sites = ifelse(is.na(Sites), 0, Sites), 
+         Mean.Hours = ifelse(is.na(Mean.Hours), 0, Mean.Hours), 
+         Total.Hours = ifelse(is.na(Total.Hours), 0, Total.Hours), 
+         Perminance = ifelse(is.na(Perminance), 0, Perminance), 
+         Schedule = ifelse(is.na(Schedule), 0, Schedule), 
+         Calendar = ifelse(is.na(Calendar), 0, Calendar)), by = c("BHCMIS ID","Year")) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         Staff, Assets, Sites.y, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
+         Pct.NHA:Pct.COM)
+
+
+
+
+
+did.util <- c(0, 0, 0, 0)
+
+for (j in 10:12){
+  
+  df.temp <- df.util[,c(1:9, j, 12:ncol(df.util))]
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp  , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "STATE",
+      verbose = TRUE
+    )
+  did.util <- rbind(did.util, outcomes$coeftable)
+}
+
+
+did.util <- did.util[-1,]
+rownames(did.util) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+p1 <- df.util %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0), 
+         Treated = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Post, Treated) %>% 
+  select(Staff:Sites.y) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  pivot_longer(cols = Staff:Sites.y) %>% 
+  mutate(value = round(value, 2)) %>% 
+  #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
+  pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
+  mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
+  cbind(did.util) %>% 
+        
+  #       , group =   gsub(x = df.util %>% 
+  # select(Complexity:Intensity) %>% 
+  # colnames(), pattern = "^[[:alpha:]]+\\.", replacement = "")) %>% 
+  # arrange(desc(group)) %>% 
+   select(name, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
+  mutate(Estimate = round(Estimate, 2), 
+         `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
+         `% Change` = round(Estimate / `1_0` * 100, 1)) %>% 
+  rename(Outcome = name) %>% 
+  select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  #pack_rows(index = c("Selection" = 7, "UDS Measure Denom" = 6, "Stinting" = 7)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
+p1
+
+
+
+p2 <- ggarrange(
+  event_study(data = df.util, 
+  yname = "Staff", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Staff") , 
+  event_study(data = df.util, 
+  yname = "Assets", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Assets") ,
+event_study(data = df.util, 
+  yname = "Sites.y", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Sites"), common.legend = TRUE ) 
+p2
+
+
+
+summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Assets ~ Treated*year.rel))$coeff[4,]
+summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Staff ~ Treated*year.rel))$coeff[4,]
+summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Sites.y ~ Treated*year.rel))$coeff[4,]
+
+```
+
+
 ## Broken down by components
 ```{r}
 # 
@@ -653,7 +784,7 @@ theme(panel.spacing = unit(1, "lines")) +
 
 
 
-## Effects stratified by profitability
+## Effects stratified by profitability or Quality
 
 ```{r}
 
@@ -662,7 +793,9 @@ theme(panel.spacing = unit(1, "lines")) +
 
 
 
-splits <- c(mean(dfc[dfc$year.rel == -1,]$ngla_net_gain_loss / dfc[dfc$year.rel == -1,]$ngla_expense, na.rm = TRUE))
+splits <- c(mean(dfc[dfc$year.rel == -1,]$Qcomp, na.rm = TRUE))
+
+splits <- quantile(dfc[dfc$year.rel == -1,]$Qcomp, c(0.5), na.rm = TRUE)
 
 #splits <- c(-0.03, 0.1)
 
@@ -684,8 +817,8 @@ df.profit <- dfc %>%
   ungroup()#, #pap.rate:dm.total, Liquidity:Altman) 
   
 df.profit <- df.profit %>% 
-  left_join(dfc %>% filter(year.rel == -1) %>% select(ID, ngla_net_gain_loss, ngla_revenue, ngla_expense, Assets) %>% 
-  mutate(pc = ngla_net_gain_loss / ngla_expense) , by = c("ID")) # %>% filter(`BHCMIS ID` %notin% c("010450","070430"))
+  left_join(dfc %>% filter(year.rel == -1) %>% select(ID, Qcomp, ngla_net_gain_loss, ngla_revenue, ngla_expense, Assets) %>% 
+  mutate(pc = Qcomp) , by = c("ID")) # %>% filter(`BHCMIS ID` %notin% c("010450","070430"))
   
 
 splits1 <- c(min(df.profit$pc, na.rm = TRUE)-1, splits)
@@ -1250,7 +1383,8 @@ df.spill <- df.z %>%
                   ifelse(Dist >= 50 & Dist < 100, 3, 4)))))) %>% 
   #filter(is.na(Dist.f) | Dist.f == 2) %>% 
   left_join(uds.sites.full %>% 
-              filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
+              #filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
+              filter(`Location Setting` %in% c("All Other Clinic Types","School") | is.na(`Location Setting`)) %>% 
               mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
                                 ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
                      Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
@@ -1496,7 +1630,8 @@ did.access.figures[,c(1, 7:10)] %>%
   add_header_above(c(" " = 1, "TE (Intercept)" = 2,"TE * Distance (Slope)" = 2))
 
  
-summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins.rate * df.spill3[df.spill3$Att > 0& df.spill3$Att.viz < df.spill3$Year,]$TotalPop)
+summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins.rate * df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$TotalPop)
+
 
 
 
