@@ -267,7 +267,8 @@ df.util <- dfc %>%
          Schedule = ifelse(is.na(Schedule), 0, Schedule), 
          Calendar = ifelse(is.na(Calendar), 0, Calendar)), by = c("BHCMIS ID","Year")) %>% 
   select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
-         Staff, Assets, Sites.y, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
+         Staff, #Assets, 
+         Sites.y, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
          Pct.NHA:Pct.COM)
 
 
@@ -276,7 +277,7 @@ df.util <- dfc %>%
 
 did.util <- c(0, 0, 0, 0)
 
-for (j in 10:12){
+for (j in 10:11){
   
   df.temp <- df.util[,c(1:9, j, 12:ncol(df.util))]
   colnames(df.temp)[10] <- "Outcome"
@@ -336,22 +337,22 @@ p1
 
 
 p2 <- ggarrange(
-  event_study(data = df.util, 
-  yname = "Staff", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
-  filter(abs(term) <= 5) %>% 
-  filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Staff") , 
-  event_study(data = df.util, 
-  yname = "Assets", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
-  filter(abs(term) <= 5) %>% 
-  filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Assets") ,
+  event_study(data = df.util,
+  yname = "Staff", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
+  filter(abs(term) <= 5) %>%
+  filter(estimator == "Gardner (2021)") %>%
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) +
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Staff") + xlab("Year Relative to Competitive Shock") + ylab("Sites"),
+  # event_study(data = df.util, 
+  # yname = "Assets", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  # filter(abs(term) <= 5) %>% 
+  # filter(estimator == "Gardner (2021)") %>% 
+  # ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  # #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  # theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  # geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Assets") + xlab("Year Relative to Competitive Shock"),
 event_study(data = df.util, 
   yname = "Sites.y", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
@@ -359,7 +360,7 @@ event_study(data = df.util,
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Sites"), common.legend = TRUE ) 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Sites") + xlab("Year Relative to Competitive Shock"), common.legend = TRUE ) 
 p2
 
 
@@ -1833,7 +1834,7 @@ df.rival <- dfc %>%
          Total,MCD:COM, Pct.MCD, Pct.None, Pct.MCR, Pct.COM, #MCD:COM, 
          #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
          #Liquidity:NetWorth, 
-         Pct.NHA:Pct.Homeless)
+         Pct.NHA:Pct.Homeless, Assets, Staff)
   
 
 
@@ -1943,6 +1944,131 @@ summary(lm(data = df.rival %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Trea
 ```
 
 
+## Rival Capacity
+```{r}
+
+
+df.rival.util <- df.rival %>% 
+  inner_join(uds.sites.full %>% 
+             filter(`Location Setting` %in% c("All Other Clinic Types","School") | is.na(`Location Setting`)) %>% 
+              #filter(`Location Setting` %in% c("All Other Clinic Types","School")) %>% 
+              mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
+                                ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
+                     Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
+                                ifelse(`Operational Schedule` == "Part-Time", 0.5, 0)),
+                     Calendar = ifelse(`Calendar Schedule` == "Year-Round", 1,
+                                ifelse(`Calendar Schedule` == "Seasonal", 0.5, 0))) %>% 
+              group_by(`BHCMIS ID`, Year) %>% 
+              summarise(Sites = n_distinct(`Site Name`), Mean.Hours = mean(Access, na.rm = TRUE), Total.Hours = sum(Access, na.rm = TRUE), 
+                        Perminance = sum(Type.num, na.rm = TRUE), Schedule = sum(Schedule, na.rm = TRUE), Calendar = sum(Calendar, na.rm = TRUE)) %>% 
+                mutate(Sites = ifelse(is.na(Sites), 0, Sites), 
+         Mean.Hours = ifelse(is.na(Mean.Hours), 0, Mean.Hours), 
+         Total.Hours = ifelse(is.na(Total.Hours), 0, Total.Hours), 
+         Perminance = ifelse(is.na(Perminance), 0, Perminance), 
+         Schedule = ifelse(is.na(Schedule), 0, Schedule), 
+         Calendar = ifelse(is.na(Calendar), 0, Calendar)), by = c("BHCMIS ID","Year")) %>% 
+  select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
+         Staff, #Assets, 
+         Sites, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
+          Pct.MCD:Pct.Homeless)
+
+
+
+did.rival.util <- c(0, 0, 0, 0)
+
+for (j in 10:11){
+  
+  df.temp <- df.rival.util[,c(1:9, j, 13:ncol(df.rival.util))]
+  colnames(df.temp)[10] <- "Outcome"
+  outcomes <- did2s(
+      data = df.temp  , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "STATE",
+      verbose = TRUE
+    )
+  did.rival.util <- rbind(did.rival.util, outcomes$coeftable)
+}
+
+
+did.rival.util <- did.rival.util[-1,]
+rownames(did.rival.util) <- NULL
+
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+
+p1 <- df.rival.util %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0), 
+         Treated = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(Post, Treated) %>% 
+  select(Staff:Sites) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  pivot_longer(cols = Staff:Sites) %>% 
+  mutate(value = round(value, 2)) %>% 
+  #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
+  pivot_wider(id_cols = name, names_from = c(Treated, Post), values_from = value) %>% 
+  mutate(Unadjusted = (`1_1` - `1_0`) - (`0_1` - `0_0`)) %>% 
+  cbind(did.rival.util) %>% 
+        
+  #       , group =   gsub(x = df.rival.util %>% 
+  # select(Complexity:Intensity) %>% 
+  # colnames(), pattern = "^[[:alpha:]]+\\.", replacement = "")) %>% 
+  # arrange(desc(group)) %>% 
+   select(name, `0_0`, `0_1`, `1_0`, `1_1`, Unadjusted, Estimate, `Std. Error`) %>% 
+  mutate(Estimate = round(Estimate, 2), 
+         `95% CI` = paste(round(Estimate - 1.96 * `Std. Error`, 2), ", ", round(Estimate + 1.96 * `Std. Error`, 2), sep = ""), 
+         `% Change` = round(Estimate / `1_0` * 100, 1)) %>% 
+  rename(Outcome = name) %>% 
+  select(Outcome:Estimate, `95% CI`, `% Change`) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Pre","Post","Pre","Post","Unadjusted DID","Estimate","95% CI","% Change")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  #pack_rows(index = c("Selection" = 7, "UDS Measure Denom" = 6, "Stinting" = 7)) %>% 
+  add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
+p1
+
+
+
+p2 <- ggarrange(
+  event_study(data = df.rival.util, 
+  yname = "Staff", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Staff") , 
+  # event_study(data = df.rival.util, 
+  # yname = "Assets", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  # filter(abs(term) <= 5) %>% 
+  # filter(estimator == "Gardner (2021)") %>% 
+  # ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  # #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  # theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  # geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Assets") ,
+event_study(data = df.rival.util, 
+  yname = "Sites", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Sites"), common.legend = TRUE ) 
+p2
+
+
+
+#summary(lm(data = df.rival.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Assets ~ Treated*year.rel))$coeff[4,]
+summary(lm(data = df.rival.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Staff ~ Treated*year.rel))$coeff[4,]
+summary(lm(data = df.rival.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Sites ~ Treated*year.rel))$coeff[4,]
+
+```
 
 
 
