@@ -1695,7 +1695,7 @@ qnats2 <- seq(0.25, 1, by = 0.25)
  
    model.dist.quants <-  did2s(
       data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)), 
-      yname = "Sites", 
+      yname = "Medicaid", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1708,7 +1708,7 @@ qnats2 <- seq(0.25, 1, by = 0.25)
   for (i in 1:4){
       model.dist.quants <-  did2s(
       data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i]))%>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
-      yname = "Sites", 
+      yname = "Medicaid", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1770,7 +1770,7 @@ zp
 
 did2s(
       data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
-      yname = "Total.Hours", 
+      yname = "NumberofPatients", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1781,8 +1781,6 @@ did2s(
 df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% 
   group_by(Tx) %>% 
   summarise(mean(Sites))
-
-
 
 
 
@@ -1830,11 +1828,13 @@ df.rival <- dfc %>%
          None = Total * Pct.None / 100, 
          MCR = Total * Pct.MCR / 100, 
          COM = Total * Pct.COM / 100) %>% 
+    mutate(Complexity = (HIV.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev) / 5, 
+         Intensity = (HIV.care + HeartDisease.care + Depression.care + Diabetes.care + Hypertension.care) / 5) %>% 
     select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
          Total,MCD:COM, Pct.MCD, Pct.None, Pct.MCR, Pct.COM, #MCD:COM, 
          #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
          #Liquidity:NetWorth, 
-         Pct.NHA:Pct.Homeless, Assets, Staff)
+         Pct.NHA:Pct.Homeless, Assets, Staff, Complexity, Intensity)
   
 
 
@@ -1941,6 +1941,7 @@ rpm
 
 summary(lm(data = df.rival %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), COM ~ Treated*year.rel))
   
+
 ```
 
 
