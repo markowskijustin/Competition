@@ -117,11 +117,11 @@ plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   guides(colour = "none") + ylim(0, 4000)
 
 
-p.desc <- ggarrange(plot1, plot0) 
+p.desc <- ggarrange(plot1, plot0, ncol = 1) 
 
 p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
 
-ggsave(filename = "Picture1.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 16, height = 9)
+ggsave(filename = "Picture1.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 11, height = 15)
 
 ```
 
@@ -231,7 +231,7 @@ event_study(data = df.core,
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience") + xlab("Year Relative to Competitive Shock") + ylab("Risk Units"), common.legend = TRUE, nrow = 1 ) 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience") + xlab("Year Relative to Competitive Shock") + ylab("Risk Units"), common.legend = TRUE, ncol = 1 ) 
 p0
 
 
@@ -376,7 +376,7 @@ summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treat
 summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Sites.y ~ Treated*year.rel))$coeff[4,]
 
 
-)
+
 
 ```
 
@@ -576,6 +576,7 @@ p2
 
 summary(lm(data = df.select.stint %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Complexity ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.select.stint %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Intensity ~ Treated*year.rel))$coeff[4,]
+
 
 
 
@@ -1782,7 +1783,7 @@ zp4 <- event_study(data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ife
 
 zp <- ggarrange(zp1, zp2, zp3, zp4, common.legend = TRUE)
 zp <- ggarrange(zp3, zp4, common.legend = TRUE)
-zp
+
 
 did2s(
       data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
@@ -1799,7 +1800,7 @@ df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, 
   summarise(mean(Sites))
 
 
-
+#ggsave(filename = "Picture13.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = zp, width = 16, height = 9)
 ```
 
 
@@ -2192,7 +2193,7 @@ mapps <- plot_usmap() +
        subtitle = "By Distance Traveled by Rival") +
   theme(legend.position = "right")
 
-ggsave(filename = "Picture11.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = mapps, width = 16, height = 9)
+#ggsave(filename = "Picture11.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = mapps, width = 16, height = 9)
 ```
 
 
@@ -2308,7 +2309,7 @@ df.p %>%
 ```{r}
 
 ## All Hypotheses tested
-data.frame(rbind(did.core, did.select.stint, did.select.payer, did.rival)) %>% 
+bhoch <- data.frame(rbind(did.core, did.select.stint, did.select.payer, did.rival)) %>% 
   rbind(TEs) %>% rbind(TEs_Dist) %>% 
   arrange(`Pr...t..`) %>% 
   cbind(c(1:43) / 43 * 0.1) %>% 
@@ -2318,7 +2319,7 @@ data.frame(rbind(did.core, did.select.stint, did.select.payer, did.rival)) %>%
 
 
 
-
+#ggsave(filename = "Picture12.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = bhoch, width = 16, height = 9)
 
 
 ```
