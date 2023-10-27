@@ -119,8 +119,9 @@ plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
 
 p.desc <- ggarrange(plot1, plot0) 
 
-annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
+p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
 
+ggsave(filename = "Picture1.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 16, height = 9)
 
 ```
 
@@ -210,7 +211,7 @@ p0 <- ggarrange(
   event_study(data = df.core, 
   yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
-  #filter(estimator == "Gardner (2021)") %>% 
+  filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
@@ -218,7 +219,7 @@ p0 <- ggarrange(
 event_study(data = df.core, 
   yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
-  #filter(estimator == "Gardner (2021)") %>% 
+  filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
@@ -226,7 +227,7 @@ event_study(data = df.core,
 event_study(data = df.core, 
   yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
-  #filter(estimator == "Gardner (2021)") %>% 
+  filter(estimator == "Gardner (2021)") %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
@@ -237,6 +238,11 @@ p0
 summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Total ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Qcomp ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Altman ~ Treated*year.rel))$coeff[4,]
+
+
+#ggsave(filename = "Picture3a.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 16, height = 9)
+
+
 ```
 
 
@@ -368,6 +374,9 @@ p2
 summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Assets ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Staff ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Sites.y ~ Treated*year.rel))$coeff[4,]
+
+
+)
 
 ```
 
@@ -552,7 +561,7 @@ p2 <- ggarrange(
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Complexity") , 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Complexity") + xlab("Year Relative to Competitive Shock")  + ylab("Prevalence"), 
 event_study(data = df.select.stint, 
   yname = "Intensity", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
@@ -560,13 +569,15 @@ event_study(data = df.select.stint,
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
   #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Intensity"), common.legend = TRUE ) 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Intensity") + xlab("Year Relative to Competitive Shock") + ylab("Visits"), common.legend = TRUE ) 
 p2
 
 
 
 summary(lm(data = df.select.stint %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Complexity ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.select.stint %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Intensity ~ Treated*year.rel))$coeff[4,]
+
+
 
 ```
 
@@ -704,6 +715,8 @@ summary(lm(data = df.select.payer %>% filter(!is.na(Tx) & year.rel < 0) %>% muta
 summary(lm(data = df.select.payer %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), MCR ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.select.payer %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), COM ~ Treated*year.rel))$coeff[4,]
 
+
+
 ```
 
 
@@ -752,7 +765,7 @@ options(scipen=999)
 
 
 
-data.frame(Subset = sort(rep(c("2012-2014","2015-2017","2018-2021"), 3)),
+p3 <- data.frame(Subset = sort(rep(c("2012-2014","2015-2017","2018-2021"), 3)),
       Outcome = rep(c("Total","Quality","Financial"), 3),
       Estimate = as.numeric(did.ppACA[,1]), 
       SD = as.numeric(did.ppACA[,2])) %>% 
@@ -779,7 +792,10 @@ facet_grid(~Outcome, scales= "free_x", switch = 'y', space = "free_y") +
    theme(strip.placement = "outside") +
 #theme(text=element_text(family="Times",liquid=12, color="black"))+
 theme(panel.spacing = unit(1, "lines")) + 
-  ggtitle("DID Estimates by timeperiod of competitive shocks")
+  ggtitle("DID Estimates by Timeperiod of Competitive Shocks")
+
+
+
 
 ```
 
@@ -1384,8 +1400,8 @@ df.spill <- df.z %>%
                   ifelse(Dist >= 50 & Dist < 100, 3, 4)))))) %>% 
   #filter(is.na(Dist.f) | Dist.f == 2) %>% 
   left_join(uds.sites.full %>% 
-              #filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
-              filter(`Location Setting` %in% c("All Other Clinic Types","School") | is.na(`Location Setting`)) %>% 
+              filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
+              #filter(`Location Setting` %in% c("All Other Clinic Types","School") | is.na(`Location Setting`)) %>% 
               mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
                                 ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
                      Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
@@ -1521,7 +1537,7 @@ p.spill <- df.spill2 %>%
 
 
 
-suppressWarnings(print(p.spill))
+
 
 
 ```
@@ -1935,12 +1951,14 @@ rpm4 <- event_study(data = df.rival,
 
 
 rpm <- ggarrange(rpm1, rpm2, rpm3, rpm4, common.legend = TRUE)
-rpm
+
   
 
 
 summary(lm(data = df.rival %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), COM ~ Treated*year.rel))
   
+
+
 
 ```
 
@@ -2149,9 +2167,9 @@ p.rival.dist <- df.z.dist %>%
    scale_y_continuous(name = 'Number of Rivals', sec.axis = sec_axis(~./81*1000, name = "Cummulative percentage (%)")) + 
   theme_tufte_revised() + ggtitle("FQHC Rivals by Distance from Service Area to New Competitive Zip") + xlab("Distance Travelled (km)")
 
+
+
 p.rival.dist
-
-
 
 
 ```
@@ -2168,11 +2186,13 @@ eq_transformed <- usmap_transform(df.z.dist %>%
   mutate(`Distance Travelled` = ifelse(DistToClosestSite > 25, ">25km", "<25km"))
 
 
-plot_usmap() +
+mapps <- plot_usmap() +
   geom_point(data = eq_transformed, aes(x = x, y = y, color = `Distance Travelled`)) +
   labs(title = "Competitive Zip Codes",
        subtitle = "By Distance Traveled by Rival") +
   theme(legend.position = "right")
+
+ggsave(filename = "Picture11.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = mapps, width = 16, height = 9)
 ```
 
 
