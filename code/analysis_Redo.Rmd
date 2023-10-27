@@ -1464,6 +1464,7 @@ mm.3 <- mm.3[-1,]
 #mm.3 <- mm.50 
 
 
+
 ```
 
 
@@ -2298,8 +2299,79 @@ df.p %>%
           tbl_summary(by = Type, 
                 statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
   add_p()
+
+    
+    
+```
+
+
+## Ratio of Distance between incumbent sites and rival
+```{r}
         
     
+mm.dist <-   df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Incumbent") %>% 
+  select(Zip, value, ClinicType, long, lat) %>% 
+  unique() %>% 
+  arrange(Zip)
+
+
+
+vec <- 0
+for (k in 1:length(unique(mm.dist$Zip))){
+  
+ mm.temp <- mm.dist %>% filter(Zip == unique(mm.dist$Zip)[k]) %>% select(long, lat)
+ mm.temp <- dist(mm.temp, upper = FALSE)
+ vec <- c(vec, mean(mm.temp, na.rm = TRUE))
+}
+
+
+inc.dist <- data.frame(Zip = unique(mm.dist$Zip), DistIncs = vec[-1]* 111.139)
+
+    
+mm.dist <-   df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Rival") %>% 
+  select(Zip, value, ClinicType, long, lat) %>% 
+  unique() %>% 
+  arrange(Zip)
+
+
+
+vec <- 0
+for (k in 1:length(unique(mm.dist$Zip))){
+  
+ mm.temp <- mm.dist %>% filter(Zip == unique(mm.dist$Zip)[k]) %>% select(long, lat)
+ mm.temp <- dist(mm.temp, upper = FALSE)
+ vec <- c(vec, mean(mm.temp, na.rm = TRUE))
+}
+
+rival.dist <- data.frame(Zip = unique(mm.dist$Zip), DistRivals = vec[-1]* 111.139)
+
+
+
+df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Incumbent") %>%
+  select(Zip, xcoor, ycoor, Radius) %>% 
+  full_join(df.p %>% 
+  filter(Year.y == Att.z) %>% 
+  filter(ClinicType == "Rival") %>%
+  select(Zip, xcoor, ycoor), by = c("Zip")) %>% 
+  mutate(DistIncumbtoRival = sqrt((xcoor.x - xcoor.y)^2 + (ycoor.x - ycoor.y)^2)) %>% 
+  group_by(Zip) %>% 
+  summarise(SD = sd(DistIncumbtoRival, na.rm = TRUE), DistIncumbtoRival = mean.nas(DistIncumbtoRival), Radius = mean(Radius)) %>% 
+  left_join(inc.dist, by = c("Zip")) %>% 
+  left_join(rival.dist, by = c("Zip")) %>% 
+  mutate(DistIncs = DistIncs / Radius, DistRivals = ifelse(DistRivals == "NaN", NA, DistRivals / Radius)) %>% 
+  select(DistIncumbtoRival, DistIncs, DistRivals) %>% 
+  tbl_summary(statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no")
+  #summarise(mean.nas(DistIncumbtoRival), mean.nas(DistIncs ), mean.nas(DistRivals ))
+
+
+
+
 ```
 
 
