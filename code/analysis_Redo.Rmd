@@ -67,8 +67,8 @@ dfc %>%
   #filter(!complete.cases(.)) %>% 
   tbl_summary(by = Treat, 
                 statistic = list(all_continuous() ~ "{mean} ({sd})"),
-missing = "no") %>% 
-  add_p()
+missing = "no", digits = list(everything() ~ c(2))) %>% 
+  add_p(pvalue_fun = function(x) style_pvalue(x, digits = 3)) 
 
 ```
 
