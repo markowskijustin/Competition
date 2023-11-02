@@ -207,6 +207,7 @@ df.core %>%
 
 
 
+
 p0 <- ggarrange(
   event_study(data = df.core, 
   yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
