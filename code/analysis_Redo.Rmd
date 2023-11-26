@@ -618,6 +618,7 @@ summary(lm(data = df.select.stint %>% filter(!is.na(Tx) & year.rel < 0) %>% muta
 
 
 
+
 ```
 
 
@@ -661,7 +662,8 @@ for (j in 10:17){
       verbose = FALSE
     )
   
-  did.select.payer <- rbind(did.select.payer, outcomes$coeftable)
+  did.select.payer <
+    - rbind(did.select.payer, outcomes$coeftable)
   
   
 }
