@@ -123,6 +123,14 @@ p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zi
 
 ggsave(filename = "Picture1.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 11, height = 15)
 
+
+
+p.desc <- ggarrange(plot1, plot0, ncol = 2) 
+
+p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
+
+ggsave(filename = "Picture1h.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 16, height = 9)
+
 ```
 
 
@@ -245,6 +253,34 @@ summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treat
 #ggsave(filename = "Picture3a.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 16, height = 9)
 
 
+p0 <- ggarrange(
+  event_study(data = df.core, 
+  yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients") + xlab("Year Relative to Competitive Shock") + ylab("Number of Patients"), 
+event_study(data = df.core, 
+  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Quality Composite")+ xlab("Year Relative to Competitive Shock") + ylab("Percentage Points"), 
+event_study(data = df.core, 
+  yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
+  filter(abs(term) <= 5) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience") + xlab("Year Relative to Competitive Shock") + ylab("Risk Units"), common.legend = TRUE, ncol = 3 ) 
+p0
+
+ggsave(filename = "Picture3ah.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 17, height = 9)
 ```
 
 
@@ -373,7 +409,7 @@ p2
 
 
 
-summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Assets ~ Treated*year.rel))$coeff[4,]
+#summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Assets ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Staff ~ Treated*year.rel))$coeff[4,]
 summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Sites.y ~ Treated*year.rel))$coeff[4,]
 
@@ -1121,15 +1157,15 @@ theme(panel.spacing = unit(1, "lines")) +
 ## Stratified effects in linearized fashion
 ```{r}
 
-did2s(
-      data = df.profit %>% mutate(pc = ngla_net_gain_loss / ngla_expense * 10) %>% filter(!is.na(pc)) , 
-      yname = "Qcomp", 
-      treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * pc) + I(Tx * pc^2) ,
-        cluster_var = "STATE",
-      verbose = FALSE
-    )
+# did2s(
+#       data = df.profit %>% mutate(pc = ngla_net_gain_loss / ngla_expense * 10) %>% filter(!is.na(pc)) , 
+#       yname = "Qcomp", 
+#       treatment = "Tx",
+#         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
+#         second_stage = ~ i(Tx, ref = FALSE) + I(Tx * pc) + I(Tx * pc^2) ,
+#         cluster_var = "STATE",
+#       verbose = FALSE
+#     )
 
 did2s(
       data = df.size  %>% mutate(Size = Size / 1000 ), 
