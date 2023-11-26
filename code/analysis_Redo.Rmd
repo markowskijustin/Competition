@@ -667,6 +667,7 @@ for (j in 10:17){
 }
 
 
+
 did.select.payer <- did.select.payer[-1,]
 rownames(did.select.payer) <- NULL
 
