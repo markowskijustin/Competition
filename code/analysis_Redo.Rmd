@@ -521,7 +521,7 @@ df.select.stint <- dfc %>%
          Intensity = (HIV.care + HeartDisease.care + Depression.care + Diabetes.care + Hypertension.care) / 5, 
          Intensity.w = (HIV.care * HIV.prev + HepC.care * HepC.prev + Asthma.care * Asthma.prev + HeartDisease.care * HeartDisease.prev + Depression.care * Depression.prev + Diabetes.care * Diabetes.prev + Hypertension.care * Hypertension.prev) / 
                   (HIV.prev+ HepC.prev + Asthma.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev), 
-         PatientsPerStaff = Staff, #Total / Staff, 
+         PatientsPerStaff = log(Total / Staff), 
          ProgramCostPerPatient = log(ngla_expense / Total)) %>% 
   select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
          Complexity, Intensity, PatientsPerStaff, ProgramCostPerPatient, #HIV.prev:Hypertension.care, pap.denom, crc.denom, adultbmi.denom, childbmi.denom, htn.denom, dm.denom,#MCD:COM, 
@@ -663,8 +663,7 @@ for (j in 10:17){
       verbose = FALSE
     )
   
-  did.select.payer <
-    - rbind(did.select.payer, outcomes$coeftable)
+  did.select.payer <- rbind(did.select.payer, outcomes$coeftable)
   
   
 }
