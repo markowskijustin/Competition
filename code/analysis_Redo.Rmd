@@ -442,7 +442,7 @@ summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treat
 
 
 did2s(
-      data = dfc %>% mutate(outcome = log(Total / Staff)) %>% filter(outcome < 8 & !is.infinite(outcome)), 
+      data = dfc %>% mutate(outcome = log(ngla_revenue / Staff)) %>% filter(outcome < 15 & !is.infinite(outcome)), 
       yname = "outcome", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
@@ -459,6 +459,8 @@ hist((dfc$Total / dfc$Staff))
 summary(log(dfc$Total / dfc$Staff))
 
 
+hist(log(dfc$ngla_revenue / dfc$Staff))
+summary(log(dfc$ngla_revenue / dfc$Staff))
 
 
 p14 <- event_study(data = dfc %>% mutate(outcome = log(Total / Staff)) %>% filter(outcome < 10),
