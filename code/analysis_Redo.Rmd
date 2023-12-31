@@ -1815,7 +1815,7 @@ qnats2 <- seq(0.25, 1, by = 0.25)
  
    model.dist.quants <-  did2s(
       data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)), 
-      yname = "Medicaid", 
+      yname = "NumberofPatients", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1828,7 +1828,7 @@ qnats2 <- seq(0.25, 1, by = 0.25)
   for (i in 1:4){
       model.dist.quants <-  did2s(
       data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i]))%>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
-      yname = "Medicaid", 
+      yname = "NumberofPatients", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1841,8 +1841,8 @@ qnats2 <- seq(0.25, 1, by = 0.25)
     tes
     
     
-zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.8)), 
-  yname = "Sites", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
+zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)), 
+  yname = "NumberofPatients", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) < 7) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
@@ -1853,7 +1853,7 @@ zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.8)),
 
 
 zp2 <- event_study(data = df.spill3 %>% filter(Dist == 0), 
-  yname = "Sites", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
+  yname = "NumberofPatients", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) < 7) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
@@ -1862,14 +1862,14 @@ zp2 <- event_study(data = df.spill3 %>% filter(Dist == 0),
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Locations in Competitive Zip")+ xlab("Year Relative to Competitive Shock") + ylab("Number of Locations")
 
 
-zp3 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.8)) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
+zp3 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
   yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) < 7) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6) + theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Hours per Week in Farthest 20% of Zips")+ xlab("Year Relative to Competitive Shock") + ylab("Hours per Week")
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Hours per Week in Farthest 10% of Zips")+ xlab("Year Relative to Competitive Shock") + ylab("Hours per Week")
 
 
 
@@ -1885,6 +1885,8 @@ zp4 <- event_study(data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ife
 
 
 zp <- ggarrange(zp1, zp2, zp3, zp4, common.legend = TRUE)
+
+
 zp <- ggarrange(zp3, zp4, common.legend = TRUE)
 
 
@@ -1897,6 +1899,8 @@ did2s(
         cluster_var = "Zip",
       verbose = FALSE
     ) 
+
+
 
 df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% 
   group_by(Tx) %>% 
