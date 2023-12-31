@@ -1843,7 +1843,7 @@ qnats2 <- seq(0.25, 1, by = 0.25)
     
 zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)), 
   yname = "NumberofPatients", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
-  filter(abs(term) < 7) %>% 
+  filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
@@ -1854,7 +1854,7 @@ zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)),
 
 zp2 <- event_study(data = df.spill3 %>% filter(Dist == 0), 
   yname = "NumberofPatients", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
-  filter(abs(term) < 7) %>% 
+  filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
@@ -1864,7 +1864,7 @@ zp2 <- event_study(data = df.spill3 %>% filter(Dist == 0),
 
 zp3 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
   yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
-  filter(abs(term) < 7) %>% 
+  filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
@@ -1875,7 +1875,7 @@ zp3 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)) %>% m
 
 zp4 <- event_study(data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
   yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
-  filter(abs(term) < 7) %>% 
+  filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
@@ -1899,6 +1899,103 @@ did2s(
         cluster_var = "Zip",
       verbose = FALSE
     ) 
+
+```
+
+
+
+## Stratified analysis instead for Access
+```{r}
+
+#### STRATIFEID ANALYSIS INSTEAD
+
+
+model <- did2s(
+      data = df.spill3  %>% filter((Dist >= quantile(Dist, 0.9) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
+      yname = "Total.Hours", 
+      treatment = "Tx",
+        first_stage = ~ 1 | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    ) 
+
+TEs.strat.far <- data.frame(model$coeftable)[1,]
+
+for (i in 11:19){
+  df.temp <- df.spill3 %>% filter((Dist >= quantile(Dist, 0.9) & Att > 0) | Att == 0 )
+  df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
+  names(df.temp)[1:6] <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
+  model <- did2s(
+      data = df.temp , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ 1 | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    ) 
+  TEs.strat.far <- rbind(TEs.strat.far, data.frame(model$coeftable)[1,])
+}
+
+
+
+
+model <- did2s(
+      data = df.spill3  %>% filter((Dist == 0 & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
+      yname = "Total.Hours", 
+      treatment = "Tx",
+        first_stage = ~ 1 | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    ) 
+
+TEs.strat.close <- data.frame(model$coeftable)[1,]
+
+for (i in 11:19){
+  df.temp <- df.spill3 %>% filter((Dist == 0 & Att > 0) | Att == 0 )
+  df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
+  names(df.temp)[1:6] <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
+  model <- did2s(
+      data = df.temp , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ 1 | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    ) 
+  TEs.strat.close <- rbind(TEs.strat.close, data.frame(model$coeftable)[1,])
+}
+
+
+
+cbind(colnames(df.spill3)[10:19], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[6:10,]
+
+
+
+df.spill3  %>% filter(Dist > quantile(Dist, 0.9) ) %>% 
+  filter(Att > 0) %>% 
+  group_by(Tx) %>% 
+  summarise(mean(Total.Hours))
+
+
+df.spill3 %>% filter(Dist < quantile(Dist, 0.2)) %>% 
+  filter(Att > 0) %>%
+  summarise(mean(Total.Hours))
+
+summary(lm(data = df.spill3 %>% filter(Att > 0 & Dist < 200), Total.Hours ~ Dist))
+  
+summary(df.spill3[df.spill3$Att > 0,]$Dist)
+
+### REALLY IMPORTANT BACK OF THE ENVELOP CALCULATION
+
+sum(df.spill3 %>% filter(Att > 0 & Dist < 200 & Dist > 40 & Year == Att - 1) %>% select(Total.Hours))
+
+
+# Funcationl form of ATT x distance for total hours.... 1.64 - 0.041 * DIST... which integrated from 40km to 200km is about 524 lost hours
+# Divide that by the proceeding line leads to ~ 5% reallocation of resources
 
 
 
