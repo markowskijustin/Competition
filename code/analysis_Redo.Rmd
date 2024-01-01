@@ -153,7 +153,7 @@ df.core <- dfc %>%
          htn.rate = htn.rate * 100, 
          dm.rate = dm.rate * 100) %>% 
   select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
-         Total,Qcomp, Altman, #MCD:COM, 
+         Total, Qcomp, Altman, #MCD:COM, 
          #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
          #Liquidity:NetWorth, 
          Pct.NHA:Pct.COM) #%>%  mutate(Altman = ifelse(is.infinite(Altman), NA, Altman))#, #pap.rate:dm.total, Liquidity:Altman) 
@@ -364,6 +364,7 @@ for (j in 10:12){
   did.util <- rbind(did.util, outcomes$coeftable)
 }
 
+did.util 
 
 did.util <- did.util[-1,]
 rownames(did.util) <- NULL
@@ -442,8 +443,9 @@ summary(lm(data = df.util %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treat
 
 
 did2s(
-      data = dfc %>% mutate(outcome = log(ngla_revenue / Staff)) %>% filter(outcome < 15 & !is.infinite(outcome)), 
-      yname = "outcome", 
+      data = dfc %>% mutate(outcome = log(ngla_revenue / Staff)) %>% #filter(outcome < 15 & !is.infinite(outcome)) %>% 
+        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)), 
+      yname = "Staff", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -598,7 +600,7 @@ for (j in 10:12){
   df.temp <- df.select.stint[,c(1:9, j, 12:ncol(df.select.stint))]
   colnames(df.temp)[10] <- "Outcome"
   outcomes <- did2s(
-      data = df.temp  , 
+      data = df.temp   , 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
@@ -715,7 +717,7 @@ for (j in 10:17){
   df.temp <- df.select.payer[,c(1:9, j, 18:ncol(df.select.payer))]
   colnames(df.temp)[10] <- "Outcome"
   outcomes <- did2s(
-      data = df.temp, 
+      data = df.temp  , 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , 
@@ -1659,6 +1661,7 @@ zipsize2 <- zctas(starts_with = unique(c(df.spill2$Zip)), year = 2010)
 
 
 df.spill3 <- df.spill2 %>% filter(NumberofPatients > 50 ) %>% 
+  
   #group_by(Zip) %>% mutate(MaxNum = max(NumberofPatients)) %>% filter(MaxNum > 50) %>% 
   
   left_join(census %>% 
@@ -1764,7 +1767,7 @@ summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins
 ```{r}
 
 
-ev.pop1 <- event_study(data = df.spill3, 
+ev.pop1 <- event_study(data = df.spill3 , 
   yname = "Medicaid", idname = "Zip", tname = "Year", gname = "Att", estimator = "did2s") %>% 
   filter(abs(term) < 7) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
