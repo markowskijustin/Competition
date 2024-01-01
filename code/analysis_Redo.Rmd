@@ -1862,7 +1862,7 @@ zp2 <- event_study(data = df.spill3 %>% filter(Dist == 0),
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Locations in Competitive Zip")+ xlab("Year Relative to Competitive Shock") + ylab("Number of Locations")
 
 
-zp3 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
+zp3 <- event_study(data = df.spill3 %>% filter((Dist >= quantile(Dist, 0.9) & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
   yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
@@ -1873,7 +1873,7 @@ zp3 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)) %>% m
 
 
 
-zp4 <- event_study(data = df.spill3 %>% filter(Dist == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
+zp4 <- event_study(data = df.spill3 %>% filter((Dist == 0 & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
   yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
@@ -1900,6 +1900,7 @@ did2s(
       verbose = FALSE
     ) 
 
+#ggsave(filename = "Picture13.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = zp, width = 16, height = 9)
 ```
 
 
@@ -2004,7 +2005,7 @@ df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, 
   summarise(mean(Sites))
 
 
-#ggsave(filename = "Picture13.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = zp, width = 16, height = 9)
+
 ```
 
 
