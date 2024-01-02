@@ -1660,7 +1660,19 @@ p.spill <- df.spill2 %>%
 zipsize2 <- zctas(starts_with = unique(c(df.spill2$Zip)), year = 2010)
 
 
-df.spill3 <- df.spill2 %>% filter(NumberofPatients > 50 ) %>% 
+
+
+df.spill3 <- df.spill2 %>% #filter(NumberofPatients > 50 ) %>% 
+  
+  # inner_join(df.spill2 %>% 
+  # group_by(Zip, `BHCMIS ID`) %>% 
+  # summarise(maxmax = min(NumberofPatients)) %>% 
+  #   filter(maxmax > 100), by = c("Zip","BHCMIS ID"))  %>% 
+  
+  inner_join(df.spill2 %>% 
+  group_by(Zip, `BHCMIS ID`) %>% 
+  summarise(counts = n()) %>% 
+    filter(counts == 10), by = c("Zip","BHCMIS ID"))  %>%
   
   #group_by(Zip) %>% mutate(MaxNum = max(NumberofPatients)) %>% filter(MaxNum > 50) %>% 
   
@@ -1760,6 +1772,8 @@ summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins
 
 
 
+
+
 ```
 
 
@@ -1813,7 +1827,7 @@ ggarrange(ev.pop1, ev.pop2, ev.pop3, ev.pop4, common.legend = TRUE, ncol = 1)
 
     
     
-zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.9)), 
+zp1 <- event_study(data = df.spill3 %>% filter(Dist > quantile(Dist, 0.87)), 
   yname = "NumberofPatients", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
@@ -1834,14 +1848,14 @@ zp2 <- event_study(data = df.spill3 %>% filter(Dist == 0),
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Locations in Competitive Zip")+ xlab("Year Relative to Competitive Shock") + ylab("Number of Locations")
 
 
-zp3 <- event_study(data = df.spill3 %>% filter((Dist >= quantile(Dist, 0.9) & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
+zp3 <- event_study(data = df.spill3 %>% filter((Dist > quantile(Dist, 0.87) & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites)), 
   yname = "Total.Hours", idname = "Zip", tname = "Year", gname = "Att", estimator = "all") %>% 
   filter(abs(term) < 6) %>% 
   filter(estimator %in% c("Gardner (2021)")) %>% 
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6) + theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Hours per Week in Farthest 10% of Zips")+ xlab("Year Relative to Competitive Shock") + ylab("Hours per Week")
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Hours per Week in Farthest 13% of Zips")+ xlab("Year Relative to Competitive Shock") + ylab("Hours per Week")
 
 
 
@@ -1861,10 +1875,22 @@ zp <- ggarrange(zp1, zp2, zp3, zp4, common.legend = TRUE)
 
 zp <- ggarrange(zp3, zp4, common.legend = TRUE)
 
+zp
+
+
+# did2s(
+#       data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
+#       yname = "NumberofPatients", 
+#       treatment = "Tx",
+#         first_stage = ~ 1 | Zip + Year , 
+#         second_stage = ~ i(Tx, ref = FALSE)  ,
+#         cluster_var = "Zip",
+#       verbose = FALSE
+#     ) 
 
 did2s(
-      data = df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
-      yname = "NumberofPatients", 
+      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.87) & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
+      yname = "Total.Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -1880,14 +1906,17 @@ did2s(
 
 ## Acces shifts by quantiles
 ```{r}
-qnats1 <- seq(0, 0.833333, by = 0.166666)
-qnats2 <- seq(0.16666, 1, by = 0.1666666)
+qnats1 <- seq(0, 0.875, by = 0.125)
+qnats2 <- seq(0.125, 1, by = 0.125)
 
+
+qnats1 <- seq(0, 5/6, by = 1/6)
+qnats2 <- seq(1/6, 1, by = 1/6)
 
 
  
    model.dist.quants <-  did2s(
-      data = df.spill3 %>% filter((Dist == 0 & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)), 
+      data = df.spill3 %>% filter((Dist == 0 & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year & Att > 0, 1, Tx)), 
       yname = "NumberofPatients", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -1900,7 +1929,7 @@ qnats2 <- seq(0.16666, 1, by = 0.1666666)
     
   for (i in 1:6){
       model.dist.quants <-  did2s(
-      data = df.spill3  %>% filter((Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i]) & Att > 0 ) | Att == 0)%>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) , 
+      data = df.spill3  %>% filter((Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i]) & Att > 0 ) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year & Att > 0 , 1, Tx)) , 
       yname = "NumberofPatients", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -1913,8 +1942,8 @@ qnats2 <- seq(0.16666, 1, by = 0.1666666)
     
     tes
 
-zp.pats <- tes[-1,] %>% 
-  cbind(Quantile = 1:6) %>% 
+zp.pats <- tes %>% #tes[-1,] %>% 
+  cbind(Quantile = 1:8) %>% 
   ggplot(aes(x = Quantile, y = Estimate)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=Estimate-1.96*Std..Error, ymax=Estimate+1.96*Std..Error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
@@ -1934,7 +1963,7 @@ zp.pats
 
 
 model <- did2s(
-      data = df.spill3  %>% filter((Dist >= quantile(Dist, 0.9) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.87) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
         mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))  , 
       yname = "Total.Hours", 
       treatment = "Tx",
@@ -1947,7 +1976,7 @@ model <- did2s(
 TEs.strat.far <- data.frame(model$coeftable)[1,]
 
 for (i in 11:19){
-  df.temp <- df.spill3 %>% filter((Dist >= quantile(Dist, 0.9) & Att > 0) | Att == 0 )%>% 
+  df.temp <- df.spill3 %>% filter((Dist > quantile(Dist, 0.87) & Att > 0) | Att == 0 )%>% 
         mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
   df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
   names(df.temp)[1:6] <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
@@ -2022,11 +2051,12 @@ quantile(df.spill3[df.spill3$Att > 0,]$Dist, 0.17)
 
 ### REALLY IMPORTANT BACK OF THE ENVELOP CALCULATION
 
-sum(df.spill3 %>% filter(Att > 0 & Dist < 200 & Dist > 40 & Year == Att - 1) %>% select(Total.Hours))
+sum(df.spill3 %>% filter(Att > 0 & Dist < 200 & Dist > 62 & Year == Att - 1) %>% select(Total.Hours))
 
 
 # Funcationl form of ATT x distance for total hours.... 1.64 - 0.041 * DIST... which integrated from 40km to 200km is about 524 lost hours
 # Divide that by the proceeding line leads to ~ 5% reallocation of resources
+## UPDATED FORM : 3.37 - 0.054x from 62km through 200 is 7%
 
 
 
