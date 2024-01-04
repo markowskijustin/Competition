@@ -95,9 +95,9 @@ p <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
 plot0 <- p %>% 
   arrange(CompetitorsInArea) %>% 
   ggplot(aes(x = Year, y = Count, group = CompetitorsInArea, color = CompetitorsInArea)) + ylab("FQHCs") + 
-  geom_point() + geom_line() + theme_tufte_revised() + ggtitle("FQHCs by Number of Rival Clinics") + 
+  geom_point(size = 1.1) + geom_line(size = 1.1) + theme_tufte_revised() + ggtitle("FQHCs by Number of Rival Clinics") + 
   geom_dl(label=c(rep("0 Competitors", 25), rep("1 Competitor", 25), rep("2 Competitors", 25), rep("3+ Competitors", 25)), 
-          method = list("last.points", hjust = 1, vjust = c(3, 3.5, 4, -2), cex = 0.75), inherit.aes=T ) + 
+          method = list("last.points", hjust = 1, vjust = c(3, 3.5, 4, -2), cex = 1), inherit.aes=T ) + 
   guides(colour = "none") 
 
 plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
@@ -112,8 +112,8 @@ plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   summarise(Zips = sum(Zips)) %>% 
   #filter(Year >= 2010) %>% 
   ggplot(aes(x = Year, y = Zips, group = Counts.f, color = Counts.f)) + 
-  geom_point() + geom_line() + theme_tufte_revised() + ggtitle("Zip Codes by Number of FQHC Sites") + 
-  geom_dl(label=c(rep("1 Site", 25), rep("2+ Sites", 25)), method = list("last.points", hjust = 1, vjust = -1, cex = 0.75), inherit.aes=T ) + 
+  geom_point(size = 1.1) + geom_line(size = 1.1) + theme_tufte_revised() + ggtitle("Zip Codes by Number of FQHC Sites") + 
+  geom_dl(label=c(rep("1 Site", 25), rep("2+ Sites", 25)), method = list("last.points", hjust = 1, vjust = -1, cex = 1), inherit.aes=T ) + 
   guides(colour = "none") + ylim(0, 4000)
 
 
@@ -131,6 +131,8 @@ p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zi
 
 ggsave(filename = "Picture1h.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 16, height = 9)
 
+
+p.desc
 ```
 
 
@@ -152,6 +154,7 @@ df.core <- dfc %>%
          adultbmi.rate = adultbmi.rate * 100, 
          htn.rate = htn.rate * 100, 
          dm.rate = dm.rate * 100) %>% 
+  #mutate(Qcomp = (htn.rate + dm.rate) / 2) %>% 
   select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
          Total, Qcomp, Altman, #MCD:COM, 
          #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
@@ -222,25 +225,25 @@ p0 <- ggarrange(
   yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
   filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients") + xlab("Year Relative to Competitive Shock") + ylab("Number of Patients"), 
 event_study(data = df.core, 
   yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
   filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Quality Composite")+ xlab("Year Relative to Competitive Shock") + ylab("Percentage Points"), 
 event_study(data = df.core, 
   yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
   filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience") + xlab("Year Relative to Competitive Shock") + ylab("Risk Units"), common.legend = TRUE, ncol = 1 ) 
 p0
 
@@ -250,7 +253,7 @@ summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treat
 summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Altman ~ Treated*year.rel))$coeff[4,]
 
 
-#ggsave(filename = "Picture3a.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 16, height = 9)
+ggsave(filename = "Picture3a.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 9, height =16)
 
 
 p0 <- ggarrange(
@@ -258,25 +261,25 @@ p0 <- ggarrange(
   yname = "Total", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
   filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Total Patients") + xlab("Year Relative to Competitive Shock") + ylab("Number of Patients"), 
 event_study(data = df.core, 
   yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
   filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Quality Composite")+ xlab("Year Relative to Competitive Shock") + ylab("Percentage Points"), 
 event_study(data = df.core, 
   yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>% 
   filter(abs(term) <= 5) %>% 
   filter(estimator == "Gardner (2021)") %>% 
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9)) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.2, position = position_dodge(0.9))  + 
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) + 
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="red", linetype="dashed", alpha=.5) + 
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience") + xlab("Year Relative to Competitive Shock") + ylab("Risk Units"), common.legend = TRUE, ncol = 3 ) 
 p0
 
@@ -353,7 +356,7 @@ for (j in 10:12){
   df.temp <- df.util[,c(1:9, j, 13:ncol(df.util))]
   colnames(df.temp)[10] <- "Outcome"
   outcomes <- did2s(
-      data = df.temp  , 
+      data = df.temp %>% mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))  , 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
@@ -370,6 +373,7 @@ did.util <- did.util[-1,]
 rownames(did.util) <- NULL
 
 mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+mean.inf<- function(x){ mean(ifelse(is.infinite(x), NA, x), na.rm = TRUE)}
 
 options(scipen=999)
 
@@ -378,7 +382,7 @@ p1 <- df.util %>%
          Treated = ifelse(Att > 0, 1, 0)) %>% 
   group_by(Post, Treated) %>% 
   select(Staff:logPatsPerStaff) %>% 
-  summarise_all(mean.nas) %>% 
+  summarise_all(mean.inf) %>% 
   # summarise(Total = mean(Total, na.rm = TRUE), 
   #           Quality = mean(Qcomp, na.rm = TRUE), 
   #           Finances = mean(Altman, na.rm = TRUE)) %>% 
@@ -1770,8 +1774,8 @@ did.access.figures[,c(1, 7:10)] %>%
 summary(df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$Unins.rate * df.spill3[df.spill3$Att > 0 & df.spill3$Att.viz < df.spill3$Year,]$TotalPop)
 
 
-
-
+TEs
+TEs_Dist
 
 
 
@@ -2031,7 +2035,7 @@ for (i in 11:19){
 
 
 
-cbind(colnames(df.spill3)[10:19], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[6:10,]
+cbind(colnames(df.spill3)[10:19], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[c(6:10, 1:2),]
 
 
 
@@ -2650,13 +2654,13 @@ df.p %>%
 ```{r}
 
 ## All Hypotheses tested
-bhoch <- data.frame(rbind(did.core, did.select.stint, did.select.payer, did.rival)) %>% 
+bhoch <- data.frame(rbind(did.core, did.select.stint, did.select.payer, did.util)) %>% 
   rbind(TEs) %>% rbind(TEs_Dist) %>% 
   arrange(`Pr...t..`) %>% 
-  cbind(c(1:43) / 43 * 0.1) %>% 
+  cbind(c(1:37) / 37 * 0.1) %>% 
   mutate(Row = row_number()) %>% 
   ggplot(aes(x = Row, y = `Pr...t..`)) + geom_point() + 
-  ylab("p-values") + xlab("Significance Rank") + geom_abline(slope = 1/43 * 0.1, intercept = 0, color="red", linetype="dashed", alpha=.5) + theme_minimal()
+  ylab("p-values") + xlab("Significance Rank") + geom_abline(slope = 1/37 * 0.1, intercept = 0, color="red", linetype="dashed", alpha=.5) + theme_minimal()
 
 
 
