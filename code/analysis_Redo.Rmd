@@ -154,7 +154,7 @@ df.core <- dfc %>%
          adultbmi.rate = adultbmi.rate * 100, 
          htn.rate = htn.rate * 100, 
          dm.rate = dm.rate * 100) %>% 
-  #mutate(Qcomp = (htn.rate + dm.rate) / 2) %>% 
+  #mutate(Qcomp = (crc.rate + pap.rate + adultbmi.rate + childbmi.rate) / 4) %>% 
   select(`BHCMIS ID`, value, Tx, Year, Att, Att.random, year.rel, ID, STATE, 
          Total, Qcomp, Altman, #MCD:COM, 
          #crc.rate, pap.rate, childbmi.rate, adultbmi.rate, htn.rate, dm.rate, 
