@@ -97,7 +97,7 @@ plot0 <- p %>%
   ggplot(aes(x = Year, y = Count, group = CompetitorsInArea, color = CompetitorsInArea)) + ylab("FQHCs") + 
   geom_point(size = 1.1) + geom_line(size = 1.1) + theme_tufte_revised() + ggtitle("FQHCs by Number of Rival Clinics") + 
   geom_dl(label=c(rep("0 Competitors", 25), rep("1 Competitor", 25), rep("2 Competitors", 25), rep("3+ Competitors", 25)), 
-          method = list("last.points", hjust = 1, vjust = c(3, 3.5, 4, -2), cex = 1), inherit.aes=T ) + 
+          method = list("last.points", hjust = 1, vjust = c(3, 3.5, 4, -2), cex = 1.5), inherit.aes=T ) + 
   guides(colour = "none") 
 
 plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
@@ -113,7 +113,7 @@ plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   #filter(Year >= 2010) %>% 
   ggplot(aes(x = Year, y = Zips, group = Counts.f, color = Counts.f)) + 
   geom_point(size = 1.1) + geom_line(size = 1.1) + theme_tufte_revised() + ggtitle("Zip Codes by Number of FQHC Sites") + 
-  geom_dl(label=c(rep("1 Site", 25), rep("2+ Sites", 25)), method = list("last.points", hjust = 1, vjust = -1, cex = 1), inherit.aes=T ) + 
+  geom_dl(label=c(rep("1 Site", 25), rep("2+ Sites", 25)), method = list("last.points", hjust = 1, vjust = -1, cex = 1.5), inherit.aes=T ) + 
   guides(colour = "none") + ylim(0, 4000)
 
 
@@ -306,6 +306,9 @@ event_study(data = df.core,
 p0.simple
 
 ggsave(filename = "Picture3ahSimple.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0.simple, width = 17, height = 9)
+
+
+
 
 
 
@@ -562,6 +565,7 @@ ggsave(filename = "Picture14.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figu
 #   kable_styling(latex_options = c("striped")) %>%
 #   pack_rows(index = c("Total Patients by Insurnace" = 4, "Quality Measure Components" = 6, "Financial Components" = 4)) %>%
 #   add_header_above(c(" " = 1, "Control" = 2, "Treated" = 2, " " = 1, "Staggered DID" = 3))
+
 
 
 
@@ -1952,7 +1956,7 @@ zp.pats <- tes[-1,] %>%
   ggplot(aes(x = Quantile, y = Estimate)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=Estimate-1.96*Std..Error, ymax=Estimate+1.96*Std..Error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Effects on Total Patients, by Quantile from Competitive Shock")+ xlab("Quantile of Zip Codes by Distance from Competitive Shock, adjusting for 1 year anticipation") + ylab("Effect Size")
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Effects on Total Patients, by Quantile from Competitive Shock")+ xlab("Quantile of Zip Codes by Distance from Competitive Shock, adjusting for 1 year anticipation") + ylab("Effect Estimate")
 
 zp.pats
 
