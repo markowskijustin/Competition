@@ -977,7 +977,6 @@ fins.revenue.expenses <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select
 fins.revenue.expenses <- fins.revenue.expenses %>% 
   left_join(assliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) 
 
-
 ```
 
 
