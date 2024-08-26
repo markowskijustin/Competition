@@ -1969,8 +1969,8 @@ qnats1 <- seq(0, 0.875, by = 0.125)
 qnats2 <- seq(0.125, 1, by = 0.125)
 
 
-qnats1 <- seq(0, 5/6, by = 1/6)
-qnats2 <- seq(1/6, 1, by = 1/6)
+qnats1 <- seq(0, 4/5, by = 1/5)
+qnats2 <- seq(1/5, 1, by = 1/5)
 
 
  
@@ -2023,10 +2023,12 @@ quantile(df.spill3[df.spill3$Att > 0,]$Dist, 2/3)
 
 #### STRATIFEID ANALYSIS INSTEAD
 
+quantile(df.spill3$Dist, 0.15, na.rm = TRUE)
 
 model <- did2s(
-      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.87) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
-        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))  , 
+      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
       yname = "Total.Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -2038,7 +2040,7 @@ model <- did2s(
 TEs.strat.far <- data.frame(model$coeftable)[1,]
 
 for (i in 11:19){
-  df.temp <- df.spill3 %>% filter((Dist > quantile(Dist, 0.87) & Att > 0) | Att == 0 )%>% 
+  df.temp <- df.spill3 %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 )%>% 
         mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
   df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
   names(df.temp)[1:6] <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
@@ -2059,7 +2061,8 @@ for (i in 11:19){
 
 model <- did2s(
       data = df.spill3  %>% filter((Dist == 0 & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
-        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))  , 
+        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
       yname = "Total.Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
