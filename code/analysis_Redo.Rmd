@@ -42,8 +42,8 @@ options(scipen=999)
 
 
 ```{r}
-dfc <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
-uds.sites.full <- read_csv("/Users/jhm65/Dropbox/Git/Competition/data_processed/sites_geocoded.csv") %>%
+dfc <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+uds.sites.full <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/sites_geocoded.csv") %>%
   mutate(Access = ifelse(`BHCMIS ID` == "080170" & as.numeric(`Total Weekly Hours Of Operation`) > 40000, 4, Access))
 clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   #filter(Year >= included.years[1]) %>%
@@ -123,7 +123,7 @@ p.desc <- ggarrange(plot1, plot0, ncol = 1)
 
 p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
 
-ggsave(filename = "Picture1.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 11, height = 15)
+#ggsave(filename = "Picture1.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 11, height = 15)
 
 
 
@@ -131,7 +131,7 @@ p.desc <- ggarrange(plot1, plot0, ncol = 2)
 
 p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
 
-ggsave(filename = "Picture1h.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 16, height = 9)
+#ggsave(filename = "Picture1h.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 16, height = 9)
 
 
 p.desc
@@ -255,7 +255,7 @@ summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treat
 summary(lm(data = df.core %>% filter(!is.na(Tx) & year.rel < 0) %>% mutate(Treated = ifelse(Att > 0, 1, 0)), Altman ~ Treated*year.rel))$coeff[4,]
 
 
-ggsave(filename = "Picture3a.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 9, height =16)
+#ggsave(filename = "Picture3a.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 9, height =16)
 
 
 p0 <- ggarrange(
@@ -285,7 +285,7 @@ event_study(data = df.core,
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5)  + ggtitle("Financial Resilience") + xlab("Year Relative to Competitive Shock") + ylab("Risk Units"), common.legend = TRUE, ncol = 3 ) 
 p0
 
-ggsave(filename = "Picture3ah.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 17, height = 9)
+#ggsave(filename = "Picture3ah.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0, width = 17, height = 9)
 
 
 
@@ -315,7 +315,7 @@ event_study(data = df.core,
         axis.title=element_text(size=14,face="bold")), common.legend = TRUE, ncol = 2, legend = F) 
 p0.simple
 
-ggsave(filename = "Picture3ahSimple.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0.simple, width = 17, height = 9)
+#ggsave(filename = "Picture3ahSimple.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p0.simple, width = 17, height = 9)
 
 
 
