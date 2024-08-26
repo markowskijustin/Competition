@@ -103,8 +103,8 @@ theme_tufte_revised <- function(base_size = 11, base_family = base_font_family_t
 ## Set study period
 ```{r}
 
-included.years <- 2010:2021
-included.treat <- 2013:2021
+included.years <- 2010:2023
+included.treat <- 2013:2023
 
 ```
 
@@ -113,7 +113,7 @@ included.treat <- 2013:2021
 ```{r}
 
 ## Zips
-locs <- paste("/Users/jhm65/Dropbox/Git/UDS/UDS-", c(2012:2021), "-Full-Dataset.xlsx", sep = "")
+locs <- paste("/Users/markow/Dropbox/Git/UDS/UDS-", c(2012:2023), "-Full-Dataset.xlsx", sep = "")
 uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes")[,c(1:4, 6, 5)] 
 
 #new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
@@ -150,7 +150,7 @@ uds.zip[is.na(uds.zip$Private) & uds.zip$ReportingYear > 2012,]$Private <- 0
 uds.zip <- uds.zip[uds.zip$ZipCodeType == "ZipCode",]
 
 
-uds.zip
+
 
 ```
 
@@ -229,7 +229,7 @@ uds.zip
 ```{r}
 
 ## Sites
-locs <- paste("/Users/jhm65/Dropbox/Git/UDS/UDS-", c(2012:2021), "-Full-Dataset.xlsx", sep = "")
+locs <- paste("/Users/markow/Dropbox/Git/UDS/UDS-", c(2012:2023), "-Full-Dataset.xlsx", sep = "")
 
 uds.sites <- read_excel(locs[1], sheet = "HealthCenterSiteInfo") %>% 
   select(BHCMISID, GrantNumber, HealthCenterName, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
@@ -250,12 +250,13 @@ colnames(site.temp) <- c("BHCMIS ID", "Grant Number", "Health Center Name", "Sit
 }
 
 
-for(i in 4:(length(locs)-1)){
+for(i in 4:(length(locs)-3)){
   uds.sites <- rbind(uds.sites, read_excel(locs[i], sheet = "HealthCenterSiteInfo") %>% 
                        select("BHCMIS ID", "Grant Number", "Health Center Name", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code") %>% 
   mutate(Year = 2011 + i))
 }
 
+## 2021
 temp.sites <- read_excel(locs[i+1], sheet = "HealthCenterSiteInfo" )%>% 
   select(BHCMISID, GrantNumber, HealthCenterName, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
   mutate(Year = 2021)
@@ -264,11 +265,26 @@ colnames(temp.sites) <- c("BHCMIS ID", "Grant Number", "Health Center Name", "Si
 uds.sites <- rbind(uds.sites, temp.sites)
 
 
+## 2022
+temp.sites <- read_excel(locs[i+2], sheet = "HealthCenterSiteInfo" )%>% 
+  select(BHCMISID, GrantNumber, HealthCenterName, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2022)
+colnames(temp.sites) <- c("BHCMIS ID", "Grant Number", "Health Center Name", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+uds.sites <- rbind(uds.sites, temp.sites)
+
+
+## 2023
+temp.sites <- read_excel(locs[i+3], sheet = "HealthCenterSiteInfo" )%>% 
+  select(BHCMISID, GrantNumber, HealthCenterName, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2023)
+colnames(temp.sites) <- c("BHCMIS ID", "Grant Number", "Health Center Name", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+uds.sites <- rbind(uds.sites, temp.sites)
 
 
 
-
-uds.sites.old <- read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Sites.csv", colClasses = "character") %>% 
+uds.sites.old <- read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Sites.csv", colClasses = "character") %>% 
   mutate(Year = as.numeric(Year))
 
 colnames(uds.sites.old) <- c("BHCMIS ID", "Health Center Name", "Site Name", "Site Street Address", "Site Street Address 2", "Site State", "Site ZIP Code", "Year", "GranteeID", "Site Street Address 3","Site City","ModernGrateeID")    
@@ -285,9 +301,12 @@ uds.sites.full <- uds.sites.full %>%
 
 uds.sites.full[grep(pattern = "-", uds.sites.full$Zip),]$Zip <- NA
 
-#write.csv(x = uds.sites.full, file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Sites96to21.csv")
+#write.csv(x = uds.sites.full, file = "//Users/markow/Dropbox/Git/APMs/data_processed/Sites96to21.csv")
 
 
+uds.sites %>% 
+  filter(Year %in% c(2021, 2022, 2023)) %>% 
+  arrange(`Grant Number`, Year)
 
 ```
 
@@ -306,7 +325,7 @@ coded <- geo(street = tbcoded[c(1:1000),]$`Site Street Address`,
              method = "census", 
              full_results = TRUE)
 
-for (g in 1:13){
+for (g in 1:16){
   g
 coded <- rbind(coded, 
                geo(street = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site Street Address`, 
@@ -317,9 +336,9 @@ coded <- rbind(coded,
 }
 
 coded <- rbind(coded, 
-               geo(street = tbcoded[c(14001:14253),]$`Site Street Address`, 
-             city = tbcoded[c(14001:14253),]$`Site City`, 
-             state = tbcoded[c(14001:14253),]$`Site State`, 
+               geo(street = tbcoded[c(17001:17152),]$`Site Street Address`, 
+             city = tbcoded[c(17001:17152),]$`Site City`, 
+             state = tbcoded[c(17001:17152),]$`Site State`, 
              method = "census", 
              full_results = TRUE) )
 
@@ -340,7 +359,7 @@ uds.sites.full <- uds.sites.full.temp
 
 uds.sites.full.temp %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
 
-chc <- read.csv("//Users/jhm65/Dropbox/Git/Competition/data_raw/chc.csv")
+chc <- read.csv("//Users/markow/Dropbox/Git/Competition/data_raw/chc.csv")
 
 chc %>% filter(Health.Center.Number %in% c("H80CS00881"))
 
@@ -392,7 +411,7 @@ census <- data.frame(ZipCode = 0, NAME = 0, YEAR = 0,
                      PovertyStatusDet = 0, IncomeBelowPoverty = 0, Unemployed = 0, Unemp_denom = 0, 
                      MCD.denom = 0, Medicaid = 0, Unins.denom = 0, Uninsured = 0)
 
-for (i in 1:10){
+for (i in 1:11){
   census <- rbind(census, get_acs(geography = "zcta", survey = "acs5",
                        variables = c("B01003_001","B17001_001","B17001_002","B01001_002","B01001_026",
                                      "B02001_002","B02001_003","B02001_004","B02001_005","B02001_006","B02001_008",
@@ -435,7 +454,7 @@ census$ZipCode <- substr(census$NAME, 7, 11)
 
 
 census %>% 
-  filter(YEAR == 2020) %>% 
+  filter(YEAR == 2022) %>% 
   select(ZipCode) %>% 
   #unique() %>% 
   table() %>% 
@@ -445,14 +464,14 @@ census %>%
 
 ## Merge with Older UDSs 1996-2011
 ```{r}
-uds.cw <- read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_CW.csv", colClasses = "character") %>% 
+uds.cw <- read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_CW.csv", colClasses = "character") %>% 
   mutate(link.ID = ifelse(is.na(ModernGranteeID) & !is.na(LongGrantID) & Year != 2010, LongGrantID, 
                    ifelse(is.na(ModernGranteeID) & !is.na(GranteeID), GranteeID, BHCMIS.ID)), 
          Year = as.integer(Year))
 
 
 uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   arrange(BHCMIS.ID, Year) %>% 
   select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
   filter(BHCMIS.ID == '010060' & Year %in% c(2007:2011)) %>% 
@@ -475,19 +494,21 @@ namevec <- c("BHCMIS.ID", "Year", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLan
 # Table 3B
 
 
-uds.3B.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
-uds.3B.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2012 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2013 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
 
-uds.3B.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
-uds.3B.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table3B", skip = 2) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
-uds.3B.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2014 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2015 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table3B", skip = 2) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2016 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
 
-uds.3B.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
-uds.3B.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
-uds.3B.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2017 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2018 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2019 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
 
-uds.3B.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
-uds.3B.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2020 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2021 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2022 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2022-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2023 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2023-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
 
 namevec <- c("Year", "BHCMISID", "ModernGranteeID", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLang")
 uds.3B <- rbind(cbind(Year = 2012, uds.3B.2012),
@@ -500,7 +521,10 @@ uds.3B <- rbind(cbind(Year = 2012, uds.3B.2012),
                   cbind(Year = 2018, uds.3B.2018),
                   cbind(Year = 2019, uds.3B.2019), 
                   cbind(Year = 2020, uds.3B.2020),
-                  cbind(Year = 2021, uds.3B.2021)) %>% 
+                  cbind(Year = 2021, uds.3B.2021),
+                        
+                  cbind(Year = 2022, uds.3B.2022),
+                  cbind(Year = 2023, uds.3B.2023)) %>% 
   
   rename_all(vars(namevec), function(x) namevec)
 
@@ -508,35 +532,35 @@ uds.3B <- rbind(cbind(Year = 2012, uds.3B.2012),
 
 uds.3B <- rbind(
   uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   arrange(BHCMIS.ID, Year) %>% 
   select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
   filter(Year %in% c(2007)) %>% 
   select(Year, BHCMIS.ID, ModernGranteeID, T3B_L5A_CA, T3B_L6_CA, T3B_L1_CA, T3B_L8_CA, T3B_L4_CA, T3B_L12_CA) %>% 
     setNames(namevec), 
   uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   arrange(BHCMIS.ID, Year) %>% 
   select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
   filter(Year %in% c(2008)) %>% 
   select(Year, BHCMIS.ID, ModernGranteeID, T3B_L5A_CA, T3B_L6_CA, T3B_L1_CA, T3B_L8_CA, T3B_L4_CA, T3B_L12_CA) %>% 
     setNames(namevec),
     uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   arrange(BHCMIS.ID, Year) %>% 
   select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
   filter(Year %in% c(2009)) %>% 
   select(Year, BHCMIS.ID, ModernGranteeID, T3B_L1_CB, T3B_L3_CB, T3B_L8_CA, T3B_L5_CB, T3B_L8_CD, T3B_L12_CA) %>% 
     setNames(namevec), 
   uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   arrange(BHCMIS.ID, Year) %>% 
   select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
   filter(Year %in% c(2010)) %>% 
   select(Year, BHCMIS.ID, ModernGranteeID, T3B_L1_CB, T3B_L3_CB, T3B_L8_CA, T3B_L5_CB, T3B_L8_CD, T3B_L12_CA) %>% 
     setNames(namevec), 
   uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   arrange(BHCMIS.ID, Year) %>% 
   select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
   filter(Year %in% c(2011)) %>% 
@@ -548,19 +572,22 @@ uds.3B %>%
 
 
 # Table 4
-uds.4.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
-uds.4.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2012 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2013 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
 
-uds.4.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
-uds.4.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table4", skip = 2) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
-uds.4.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2014 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2015 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table4", skip = 2) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2016 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
 
-uds.4.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
-uds.4.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
-uds.4.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2017 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2018 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2019 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
 
-uds.4.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
-uds.4.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2020 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2021 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2022 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2022-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2023 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2023-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+
 
 namevec <- c("Year", "BHCMISID", "ModernGranteeID", "<100%", "101-150%", "151-200%", ">200%", "Unknown", "FarmWorker", "Homeless", 
              "Uninsured.young", "Uninsured.old", "MCD.young", "MCD.old", "MCR.young", "MCR.old", "OtherPublic.young", "OtherPublic.old", "COM.young", "COM.old")
@@ -574,21 +601,23 @@ uds.4 <- rbind(cbind(Year = 2012, uds.4.2012),
                   cbind(Year = 2018, uds.4.2018),
                   cbind(Year = 2019, uds.4.2019), 
                   cbind(Year = 2020, uds.4.2020),
-                  cbind(Year = 2021, uds.4.2021)) %>% 
+                  cbind(Year = 2021, uds.4.2021),
+                  cbind(Year = 2022, uds.4.2022),
+                  cbind(Year = 2023, uds.4.2023)) %>% 
   
   rename_all(vars(namevec), function(x) namevec)
 
 
 uds.4 <- rbind(
 uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table4.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table4.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   filter(Year %in% c(2007, 2011)) %>% 
   select(Year, BHCMIS.ID, ModernGranteeID, T4_L1_CA, T4_L2_CA, T4_L3_CA, T4_L4_CA, T4_L5_CA, 
          T4_L16_CA, T4_L23_CA, 
          T4_L7_CA, T4_L7_CB, T4_L8_CA, T4_L8_CB, T4_L9_CA, T4_L9_CB, T4_L10_CA, T4_L10_CB, T4_L11_CA, T4_L11_CB) %>% 
   setNames(namevec), 
 uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table4.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table4.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   filter(Year %in% c(2008:2010)) %>% 
   select(Year, BHCMIS.ID, ModernGranteeID, T4_L1_CA, T4_L2_CA, T4_L3_CA, T4_L4_CA, T4_L5_CA, 
          T4_L16_CA, T4_L23_CA, 
@@ -650,25 +679,29 @@ uds.covariates %>%
 ## Table 6A
 ```{r}
 uds.6a.2011andBefore <- uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table6A.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table6A.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   select(BHCMIS.ID, Year, T6A_L10_CA:T6A_L26D_CB) %>% 
   filter(Year >= 2010) %>% 
   rename(BHCMISID = BHCMIS.ID) %>% 
   rename_all(.funs = toupper)
 
-uds.6a.2012 <- cbind(Year = 2012, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
-uds.6a.2013 <- cbind(Year = 2013, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
+uds.6a.2012 <- cbind(Year = 2012, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
+uds.6a.2013 <- cbind(Year = 2013, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
       
-uds.6a.2014 <- cbind(Year = 2014, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
-uds.6a.2015 <- cbind(Year = 2015, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6A", skip = 2)) %>% rename_all(.funs = toupper)
-uds.6a.2016 <- cbind(Year = 2016, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2014 <- cbind(Year = 2014, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
+uds.6a.2015 <- cbind(Year = 2015, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6A", skip = 2)) %>% rename_all(.funs = toupper)
+uds.6a.2016 <- cbind(Year = 2016, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
       
-uds.6a.2017 <- cbind(Year = 2017, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
-uds.6a.2018 <- cbind(Year = 2018, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
-uds.6a.2019 <- cbind(Year = 2019, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2017 <- cbind(Year = 2017, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2018 <- cbind(Year = 2018, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2019 <- cbind(Year = 2019, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
       
-uds.6a.2020 <- cbind(Year = 2020, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
-uds.6a.2021 <- cbind(Year = 2021, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper) %>% filter(!is.na(BHCMISID))
+uds.6a.2020 <- cbind(Year = 2020, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2021 <- cbind(Year = 2021, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper) %>% filter(!is.na(BHCMISID))
+
+uds.6a.2022 <- cbind(Year = 2022, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2022-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper) %>% filter(!is.na(BHCMISID))
+uds.6a.2023 <- cbind(Year = 2023, read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2023-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper) %>% filter(!is.na(BHCMISID))
+
 
 uds.6a.2012[,-c(1:3)] <- data.frame(sapply(uds.6a.2012[,-c(1:3)], as.numeric))
 uds.6a.2013[,-c(1:3)] <- data.frame(sapply(uds.6a.2013[,-c(1:3)], as.numeric))
@@ -683,9 +716,11 @@ uds.6a.2019[,-c(1:3)] <- data.frame(sapply(uds.6a.2019[,-c(1:3)], as.numeric))
 
 uds.6a.2020[,-c(1:3)] <- data.frame(sapply(uds.6a.2020[,-c(1:3)], as.numeric))
 uds.6a.2021[,-c(1:3)] <- data.frame(sapply(uds.6a.2021[,-c(1:3)], as.numeric))
+uds.6a.2022[,-c(1:3)] <- data.frame(sapply(uds.6a.2022[,-c(1:3)], as.numeric))
+uds.6a.2023[,-c(1:3)] <- data.frame(sapply(uds.6a.2023[,-c(1:3)], as.numeric))
 
 uds.6a <- bind_rows(uds.6a.2012, uds.6a.2013, uds.6a.2014,
-      uds.6a.2015, uds.6a.2016, uds.6a.2017, uds.6a.2018, uds.6a.2019, uds.6a.2020, uds.6a.2021, uds.6a.2011andBefore) %>% 
+      uds.6a.2015, uds.6a.2016, uds.6a.2017, uds.6a.2018, uds.6a.2019, uds.6a.2020, uds.6a.2021, uds.6a.2022, uds.6a.2023, uds.6a.2011andBefore) %>% 
   arrange(BHCMISID, YEAR) %>% 
   select(YEAR:T6A_L34_CB)
 
@@ -697,20 +732,21 @@ uds.6a
 ```{r}
 
 
-uds.6b.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2012 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2013 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
-uds.6b.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 1) 
-uds.6b.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2014 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2015 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 1) 
+uds.6b.2016 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
-uds.6b.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2017 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2018 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2019 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
-uds.6b.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-uds.6b.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
-
+uds.6b.2020 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2021 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2022 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2022-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2023 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2023-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
 
 uds.6b.names <- c("BHCMISID","GrantNumber","Imm.Num","Imm.Rate","imm.denom","Pap.Rate","Pap.Num","pap.denom",
                   "crc.rate","crc.num","crc.denom", 
@@ -730,7 +766,11 @@ uds.quality.6b <- rbind(
   cbind(Year = 2019, uds.6b.2019[,c(1:8, 27:29, 9:14, 18:26)] %>% setNames(uds.6b.names)),
 
   cbind(Year = 2020, cbind(uds.6b.2020[,c(1:8, 27:29, 12:17)], NA, NA, NA, uds.6b.2020[,c(21:26)]) %>% setNames(uds.6b.names)),
-  cbind(Year = 2021, cbind(uds.6b.2021[,c(1:8, 27:29, 12:17)], NA, NA, NA, uds.6b.2021[,c(21:26)]) %>% setNames(uds.6b.names))) %>% 
+  cbind(Year = 2021, cbind(uds.6b.2021[,c(1:8, 27:29, 12:17)], NA, NA, NA, uds.6b.2021[,c(21:26)]) %>% setNames(uds.6b.names)),
+  
+  cbind(Year = 2022, cbind(uds.6b.2022[,c(1:8, 27:29, 12:17)], NA, NA, NA, uds.6b.2022[,c(21:26)]) %>% setNames(uds.6b.names)),
+  cbind(Year = 2023, cbind(uds.6b.2023[,c(1:8, 27:29, 12:17)], NA, NA, NA, uds.6b.2023[,c(21:26)]) %>% setNames(uds.6b.names))) %>%
+  
   mutate(imm.rate = as.numeric(Imm.Num) / as.numeric(imm.denom), 
          pap.rate = as.numeric(Pap.Num) / as.numeric(pap.denom), 
          imm.denom = as.numeric(imm.denom), 
@@ -748,7 +788,7 @@ uds.quality.6b <- rbind(
   select(Year, BHCMISID, GrantNumber, imm.rate, imm.denom, pap.rate, pap.denom, crc.rate, crc.denom, asthma.rate, cad.rate, ivd.rate, childbmi.rate, childbmi.denom, adultbmi.rate, adultbmi.denom) %>% 
   
   bind_rows(uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table6B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table6B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   filter(Year != 2008) %>% 
     arrange(BHCMIS.ID, Year) %>% 
   #select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
@@ -800,15 +840,15 @@ uds.quality.6b <- uds.quality.6b %>%
 
 ## Table 6B - EHR or Sampling Used
 ```{r}
-vec.years <- 2012:2021
+vec.years <- 2012:2023
 vec.skips <- rep(0, length(vec.years)) 
 vec.skips[c(4)] <- 2
 vec.skips[c(5,6,7,8,9)] <- 1
-vec.files <- paste("//Users/jhm65/Dropbox/Git/UDS/UDS-",vec.years, "-Full-Dataset.xlsx", sep = "")
+vec.files <- paste("//Users/markow/Dropbox/Git/UDS/UDS-",vec.years, "-Full-Dataset.xlsx", sep = "")
 
 
 uds.quality.sampling.v.ehr <- uds.cw %>% 
-  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table6B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  inner_join(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table6B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
   filter(Year != 2008) %>% 
     arrange(BHCMIS.ID, Year) %>% 
   #select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
@@ -850,19 +890,21 @@ uds.quality.sampling.v.ehr <- uds.quality.sampling.v.ehr %>%
 ```{r}
 
 
-uds.7.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
-uds.7.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2012 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2013 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
 
-uds.7.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
-uds.7.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
-uds.7.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2014 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2015 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
+uds.7.2016 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
 
-uds.7.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
-uds.7.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
-uds.7.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2017 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2018 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2019 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
 
-uds.7.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
-uds.7.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
+uds.7.2020 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2021 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
+uds.7.2022 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2022-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
+uds.7.2023 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2023-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
 
 
 uds.7.names <- c("BHCMISID","GrantNumber","Race","Ethnicity","htn.total","htn.control","dm.total","dm.controlled")
@@ -880,14 +922,16 @@ uds.quality.7 <- rbind(
   cbind(Year = 2019, uds.7.2019[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
 
   cbind(Year = 2020, uds.7.2020[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
-  cbind(Year = 2021, uds.7.2021[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled)))) %>% 
+  cbind(Year = 2021, uds.7.2021[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  cbind(Year = 2022, uds.7.2022[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  cbind(Year = 2023, uds.7.2023[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled)))) %>% 
   mutate(htn.rate = as.numeric(htn.control) / as.numeric(htn.total), 
          dm.rate = as.numeric(dm.controlled) / as.numeric(dm.total), 
          htn.total = as.numeric(htn.total), 
          dm.total = as.numeric(dm.total)) %>% 
   select(Year:Ethnicity, htn.total, htn.rate, dm.total, dm.rate) %>% 
   
-  bind_rows(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table7clin.csv") %>% 
+  bind_rows(read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table7clin.csv") %>% 
   select(Year, ModernGranteeID:dm.controlled) %>% 
   rename(GrantNumber = ModernGranteeID) %>% 
     mutate(htn.rate = as.numeric(htn.control) / as.numeric(htn.total), 
@@ -940,14 +984,14 @@ uds.quality.7 %>%
 
 ## Financials
 ```{r}
-cw <- read_excel("/Users/jhm65/Dropbox/Git/Data/UDS-990 Crosswalk.xlsx")
+cw <- read_excel("/Users/markow/Dropbox/Git/Data/UDS-990 Crosswalk.xlsx")
 
-fins.revenue.expenses <- read.csv("//Users/jhm65/Dropbox/Git/Data/FQHC_Revenue_vs_Expenses.csv", header = TRUE)
+fins.revenue.expenses <- read.csv("//Users/markow/Dropbox/Git/Data/FQHC_Revenue_vs_Expenses.csv", header = TRUE)
 names(fins.revenue.expenses) <- gsub("^X\\.", "", names(fins.revenue.expenses))
 names(fins.revenue.expenses) <- gsub("\\.\\.", "", names(fins.revenue.expenses))
 
-staffing <- read.csv("/Users/jhm65/Dropbox/Git/Data/FQHC_Staffing.csv")
-assliabs <- read.csv("/Users/jhm65/Dropbox/Git/Data/FQHC_Assets_and_Liabilities.csv")
+staffing <- read.csv("/Users/markow/Dropbox/Git/Data/FQHC_Staffing.csv")
+assliabs <- read.csv("/Users/markow/Dropbox/Git/Data/FQHC_Assets_and_Liabilities.csv")
 
 fins.revenue.expenses <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID) %>% 
   left_join(cw, by = c("ModernGranteeID" = "Grant Number")) %>% 
@@ -985,7 +1029,7 @@ fins.revenue.expenses <- fins.revenue.expenses %>%
 
 ```{r}
 
-apm.history <- read_excel("/Users/jhm65/Dropbox/Git/APMs/data_raw/APM_History.xlsx") %>%
+apm.history <- read_excel("/Users/markow/Dropbox/Git/APMs/data_raw/APM_History.xlsx") %>%
  mutate(Class = ifelse(is.na(Year), "0 - Control", Classification))
 
 ```
@@ -1149,7 +1193,7 @@ comp.initial <- clinics.comp %>%  #left_join(clinics.comp %>% mutate(Year = as.n
   group_by(`BHCMIS ID`) %>% 
   mutate(Att = min(ifelse(Tx == 0, 2, 1)*Year, na.rm = TRUE) ) %>% 
   group_by(`BHCMIS ID`) %>% 
-  mutate(Att = ifelse(Att < 2022, Att, 0)) %>% 
+  mutate(Att = ifelse(Att < 2024, Att, 0)) %>% 
   ungroup() %>% 
   mutate(ID = as.numeric(factor(`BHCMIS ID`)))
 
@@ -1220,8 +1264,8 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
 
 ## Write the file
 ```{r}
-# write_csv(dfc, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
-# write.csv(uds.sites.full, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/sites_geocoded.csv")
+# write_csv(dfc, file = "/Users/markow/Dropbox/Git/Competition/data_processed/manuscript_analyticalfile.csv")
+# write.csv(uds.sites.full, file = "/Users/markow/Dropbox/Git/Competition/data_processed/manuscript_sites_geocoded.csv")
 ```
 
 
