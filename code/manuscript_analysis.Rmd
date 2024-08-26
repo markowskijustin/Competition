@@ -1932,7 +1932,23 @@ zp
 #     ) 
 
 did2s(
-      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.87) & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1))  , 
+      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))), 
+      yname = "Total.Hours", 
+      treatment = "Tx",
+        first_stage = ~ 1 | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    ) 
+
+
+
+did2s(
+      data = df.spill3  %>% filter((Dist < quantile(Dist, 0.15) & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))), 
       yname = "Total.Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
