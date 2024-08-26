@@ -1,0 +1,1227 @@
+---
+title: "data_cleaning_longer_period"
+author: "Justin"
+date: "2023-08-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# Libraries
+```{r}
+library(tigris)
+library(tidygeocoder)
+
+library(tidyverse)
+library(readxl)
+library(did)
+library(Matching)
+library(gtsummary)
+library(RODBC)
+library(ggpubr)
+library(fixest)
+library(kableExtra)
+library(usmap)
+library(did2s)
+library(formattable)
+library (readr)
+
+library(did2s)
+library(tidycensus)
+
+
+
+`%notin%` <- Negate(`%in%`)
+select <- dplyr::select
+
+```
+
+## Formating plots
+
+```{r, echo = FALSE, results = "asis", message=FALSE, warning = FALSE, fig.align="center"}
+
+is.extrafont.installed <- function(){
+  if(is.element("extrafont", installed.packages()[,1])){
+    library(extrafont)
+    # probably need something here to run font_import()
+    return(T)
+  }else{
+    warning("Library extrafont installed; using system sans/serif libraries as fallback fonts. 
+    To enable full font support, run: 
+      install.packages('extrafont') 
+      font_import()")
+    return(F)
+  }
+}
+
+
+# set font
+base_font_family_tufte <- function(){
+  if(is.extrafont.installed()){
+    library(extrafont)
+    tuftefont <- choose_font(c("Gill Sans MT", "Gill Sans", "GillSans", "Verdana", "serif"), quiet = FALSE)   #
+  }else{
+    tuftefont <- "serif"
+  }
+  return(tuftefont)
+}
+
+theme_tufte_revised <- function(base_size = 11, base_family = base_font_family_tufte(), ticks = TRUE) {
+  
+  ret <- theme_bw(base_family = base_family, base_size = base_size) + 
+    theme(
+      axis.line = element_line(color = 'black'),
+      axis.title.x = element_text(vjust = -0.3), 
+      axis.title.y = element_text(vjust = 0.8),
+      legend.background = element_blank(), 
+      legend.key = element_blank(), 
+      legend.title = element_text(face="plain"),
+      panel.background = element_blank(), 
+      panel.border = element_blank(),
+      panel.grid = element_blank(),
+      plot.background = element_blank(),
+      strip.background = element_blank()
+    )
+  
+  if (!ticks) {
+    ret <- ret + theme(axis.ticks = element_blank())
+  }
+  
+  ret
+} 
+
+
+
+```
+
+# Data Prep
+
+## Set study period
+```{r}
+
+included.years <- 2010:2021
+included.treat <- 2013:2021
+
+```
+
+
+## Sites and ZipCodes
+```{r}
+
+## Zips
+locs <- paste("/Users/jhm65/Dropbox/Git/UDS/UDS-", c(2012:2021), "-Full-Dataset.xlsx", sep = "")
+uds.zip <- read_excel(locs[1], sheet = "HealthCenterZipCodes")[,c(1:4, 6, 5)] 
+
+#new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
+
+uds.zip <- cbind(uds.zip, "Uninsured" = NA ,  "Medicaid" = NA, "Medicare" = NA, "Private" = NA)
+
+new.zip.names <- colnames(uds.zip)
+
+
+
+for(i in 2:length(locs)){
+  temp.zip <- read_excel(locs[i], sheet = "HealthCenterZipCodes") #[,c(1:5, 10)]
+    
+  colnames(temp.zip) <- new.zip.names[c(1:5, 7:10, 6)]
+  uds.zip <- rbind(uds.zip, temp.zip %>% mutate(ZipCode = str_pad(ZipCode, 5, pad = "0")))
+}
+
+
+
+  
+uds.zip$ReportingYear <- as.numeric(uds.zip$ReportingYear)
+uds.zip$NumberofPatients <- as.numeric(uds.zip$NumberofPatients)
+uds.zip$Uninsured <- as.numeric(uds.zip$Uninsured)
+uds.zip$Medicaid <- as.numeric(uds.zip$Medicaid)
+uds.zip$Medicare <- as.numeric(uds.zip$Medicare)
+uds.zip$Private <- as.numeric(uds.zip$Private)
+
+uds.zip[is.na(uds.zip$NumberofPatients),]$NumberofPatients <- 0
+uds.zip[is.na(uds.zip$Uninsured) & uds.zip$ReportingYear > 2012,]$Uninsured <- 0
+uds.zip[is.na(uds.zip$Medicaid) & uds.zip$ReportingYear > 2012,]$Medicaid <- 0
+uds.zip[is.na(uds.zip$Medicare) & uds.zip$ReportingYear > 2012,]$Medicare <- 0
+uds.zip[is.na(uds.zip$Private) & uds.zip$ReportingYear > 2012,]$Private <- 0
+
+uds.zip <- uds.zip[uds.zip$ZipCodeType == "ZipCode",]
+
+
+uds.zip
+
+```
+
+
+
+
+
+
+
+
+## Bunk old Zip code code
+
+```{r}
+
+# 
+# # ## Rename
+# # new.zip.names <- c("BHCMIS ID", "Grant Number", "Reporting Year" , "Zip Code", "Zip Code Type",  "None_Uninsured Patients" ,  "Medicaid_CHIP_Other Public Patients", "Medicare Patients", "Private Patients", "Total Number of Patients" ) 
+# # colnames(uds.zip) <-    new.zip.names
+# # 
+# # 
+# # ## Clean
+# # 
+# # uds.zip[uds.zip$`Total Number of Patients`== '-' | uds.zip$`Total Number of Patients`== '--',]$`Total Number of Patients` <- NA
+# # uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
+# # uds.zip <- uds.zip[!is.na(uds.zip$`Total Number of Patients`),] %>% 
+# #     mutate(`Reporting Year` = as.numeric(`Reporting Year`))
+# # 
+# # uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
+# # uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
+# # uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
+# # uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
+# # 
+# # 
+# # uds.zip <- cbind(uds.zip, broken.total = rowSums(uds.zip[,c(6:9)], na.rm = TRUE), missings = rowSums(is.na(uds.zip[,c(6:9)]))) %>% 
+# #   mutate(`Total Number of Patients` = as.numeric(`Total Number of Patients`)) %>% 
+# #   mutate(`Total Number of Patients` = ifelse(is.na(`Total Number of Patients`), round(missings*16/4), `Total Number of Patients`)) %>% 
+# #   mutate(`None_Uninsured Patients` = ifelse(is.na(`None_Uninsured Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `None_Uninsured Patients`), 
+# #          `Medicaid_CHIP_Other Public Patients` = ifelse(is.na(`Medicaid_CHIP_Other Public Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicaid_CHIP_Other Public Patients`), 
+# #          `Medicare Patients` = ifelse(is.na(`Medicare Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Medicare Patients`), 
+# #          `Private Patients` = ifelse(is.na(`Private Patients`), (`Total Number of Patients` - broken.total) * 1/missings, `Private Patients`))
+# 
+# 
+# uds.zip$`Reporting Year` <- as.numeric(uds.zip$`Reporting Year`)
+# uds.zip$`Total Number of Patients` <- as.numeric(uds.zip$`Total Number of Patients`)
+# uds.zip$`None_Uninsured Patients` <- as.numeric(uds.zip$`None_Uninsured Patients`)
+# uds.zip$`Medicaid_CHIP_Other Public Patients` <- as.numeric(uds.zip$`Medicaid_CHIP_Other Public Patients`)
+# uds.zip$`Medicare Patients` <- as.numeric(uds.zip$`Medicare Patients`)
+# uds.zip$`Private Patients` <- as.numeric(uds.zip$`Private Patients`)
+# 
+# 
+# uds.zip[is.na(uds.zip$`Total Number of Patients`),]$`Total Number of Patients` <- 0
+# uds.zip[grep("-", uds.zip$`None_Uninsured Patients`),]$`None_Uninsured Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicaid_CHIP_Other Public Patients`),]$`Medicaid_CHIP_Other Public Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Medicare Patients`),]$`Medicare Patients` <- 0
+# uds.zip[grep("-", uds.zip$`Private Patients`),]$`Private Patients` <- 0
+# 
+# uds.zip.totals <- uds.zip %>%
+#   select(`Grant Number`, `Reporting Year`, `None_Uninsured Patients`:`Total Number of Patients`) %>%
+#   group_by(`Grant Number`, `Reporting Year`) %>% summarise(None = sum(`None_Uninsured Patients`, na.rm = T),
+#                                                            MCR = sum(`Medicare Patients`, na.rm = T),
+#                                                            COM = sum(`Private Patients`, na.rm = T),
+#                                                            MCD = sum(`Medicaid_CHIP_Other Public Patients`, na.rm = T),
+#                                                            Total = sum(`Total Number of Patients`, na.rm = T))
+# 
+# uds.zip <- uds.zip[uds.zip$`Zip Code Type` == "ZipCode",]
+
+
+
+  
+```
+
+
+
+
+
+```{r}
+
+## Sites
+locs <- paste("/Users/jhm65/Dropbox/Git/UDS/UDS-", c(2012:2021), "-Full-Dataset.xlsx", sep = "")
+
+uds.sites <- read_excel(locs[1], sheet = "HealthCenterSiteInfo") %>% 
+  select(BHCMISID, GrantNumber, HealthCenterName, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2012)
+
+
+colnames(uds.sites) <- c("BHCMIS ID", "Grant Number", "Health Center Name", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+for(i in 2:3){
+site.temp <- read_excel(locs[i], sheet = "HealthCenterSiteInfo") %>% 
+                       select(BHCMISID, GrantNumber, HealthCenterName, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, 
+                              SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>%
+  mutate(Year = 2011 + i)
+  
+colnames(site.temp) <- c("BHCMIS ID", "Grant Number", "Health Center Name", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+   uds.sites <-  rbind(uds.sites, site.temp)
+}
+
+
+for(i in 4:(length(locs)-1)){
+  uds.sites <- rbind(uds.sites, read_excel(locs[i], sheet = "HealthCenterSiteInfo") %>% 
+                       select("BHCMIS ID", "Grant Number", "Health Center Name", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code") %>% 
+  mutate(Year = 2011 + i))
+}
+
+temp.sites <- read_excel(locs[i+1], sheet = "HealthCenterSiteInfo" )%>% 
+  select(BHCMISID, GrantNumber, HealthCenterName, SiteName, SiteType, LocationType, LocationSetting, OperationalSchedule, CalendarSchedule, TotalWeeklyHoursOfOperation, SiteStreetAddress, SiteCity, SiteState, SiteZIPCode) %>% 
+  mutate(Year = 2021)
+colnames(temp.sites) <- c("BHCMIS ID", "Grant Number", "Health Center Name", "Site Name", "Site Type", "Location Type", "Location Setting", "Operational Schedule", "Calendar Schedule", "Total Weekly Hours Of Operation", "Site Street Address", "Site City", "Site State", "Site ZIP Code", "Year")    
+
+uds.sites <- rbind(uds.sites, temp.sites)
+
+
+
+
+
+
+uds.sites.old <- read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Sites.csv", colClasses = "character") %>% 
+  mutate(Year = as.numeric(Year))
+
+colnames(uds.sites.old) <- c("BHCMIS ID", "Health Center Name", "Site Name", "Site Street Address", "Site Street Address 2", "Site State", "Site ZIP Code", "Year", "GranteeID", "Site Street Address 3","Site City","ModernGrateeID")    
+
+uds.sites.full <- bind_rows(uds.sites, uds.sites.old) %>% 
+  arrange(`BHCMIS ID`, Year) %>% 
+  select(`BHCMIS ID`:`Health Center Name`, Year, `Site Name`, `Site Street Address`, `Site Street Address 2`, `Site Street Address 3`, `Site City`, `Site State`, `Site ZIP Code` , `Site Type`:`Total Weekly Hours Of Operation`)
+
+         
+uds.sites.full$Zip <- substr(uds.sites.full$`Site ZIP Code`, 1, 5)
+
+uds.sites.full <- uds.sites.full %>% 
+  filter(`Site State` %notin% c('GU','VI','PW','MH','AS','FM','PR','MP')) #'AK','HI',
+
+uds.sites.full[grep(pattern = "-", uds.sites.full$Zip),]$Zip <- NA
+
+#write.csv(x = uds.sites.full, file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Sites96to21.csv")
+
+
+
+```
+
+
+
+## Clean up the missing addresses, geocoding
+
+```{r}
+
+
+
+tbcoded <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
+coded <- geo(street = tbcoded[c(1:1000),]$`Site Street Address`, 
+             city = tbcoded[c(1:1000),]$`Site City`, 
+             state = tbcoded[c(1:1000),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE)
+
+for (g in 1:13){
+  g
+coded <- rbind(coded, 
+               geo(street = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site Street Address`, 
+             city = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site City`, 
+             state = tbcoded[c((1 + g*1000):((g+1)*1000)),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+}
+
+coded <- rbind(coded, 
+               geo(street = tbcoded[c(14001:14253),]$`Site Street Address`, 
+             city = tbcoded[c(14001:14253),]$`Site City`, 
+             state = tbcoded[c(14001:14253),]$`Site State`, 
+             method = "census", 
+             full_results = TRUE) )
+
+
+coded[grep(pattern = "[[:digit:]]{5}$", coded$matched_address),]
+
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]$Zip <- str_extract(coded$matched_address, pattern = "[[:digit:]]{5}$")
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
+
+uds.sites.full.temp <- uds.sites.full
+
+```
+
+```{r}
+
+uds.sites.full <- uds.sites.full.temp
+
+uds.sites.full.temp %>% filter(`Grant Number` %in% c("H80CS00881") & Year == 2016)
+
+chc <- read.csv("//Users/jhm65/Dropbox/Git/Competition/data_raw/chc.csv")
+
+chc %>% filter(Health.Center.Number %in% c("H80CS00881"))
+
+
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Street Address" = "Site.Address")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`BHCMIS ID`:Zip) %>%
+  unique()
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] <- uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],] %>%
+  left_join(chc, by = c("Grant Number" = "Health.Center.Number", "Site Name" = "Site.Name")) %>%
+  mutate(Zip = ifelse(is.na(Zip), substr(Health.Center.Organization.ZIP.Code, 1, 5), Zip)) %>%
+  select(`BHCMIS ID`:Zip) %>%
+  unique()
+
+uds.sites.full[is.na(uds.sites.full$Zip) & uds.sites.full$Year >= included.years[1],]
+```
+
+```{r}
+
+
+table(uds.sites.full.temp$`Location Setting`)
+
+
+uds.sites.full <- uds.sites.full %>% #filter(`Location Type` == "Permanent" & `Location Setting` %in% c("All Other Clinic Types")) %>% 
+  mutate(Access = as.numeric(ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Full-Time", 40, 
+                  ifelse(`Total Weekly Hours Of Operation` == "-" & `Operational Schedule` == "Part-Time", 10, `Total Weekly Hours Of Operation`))))
+
+uds.sites.full[is.na(uds.sites.full$Zip),] 
+
+uds.sites.full %>% 
+  arrange(`Total Weekly Hours Of Operation`, `Operational Schedule` )
+
+
+```
+
+
+## Read in census data for all zip codes
+```{r}
+
+
+census <- data.frame(ZipCode = 0, NAME = 0, YEAR = 0, 
+                     TotalPop = 0,
+                     Male = 0, Female = 0, 
+                     AgeUnder18 = 0, Age18to64 = 0, Age65andOver = 0, 
+                     White = 0, Black = 0, AIAN = 0, Asian = 0, MR = 0, Hispanic = 0, EducLow = 0, EducMid = 0, EducHigh = 0, 
+                     PovertyStatusDet = 0, IncomeBelowPoverty = 0, Unemployed = 0, Unemp_denom = 0, 
+                     MCD.denom = 0, Medicaid = 0, Unins.denom = 0, Uninsured = 0)
+
+for (i in 1:10){
+  census <- rbind(census, get_acs(geography = "zcta", survey = "acs5",
+                       variables = c("B01003_001","B17001_001","B17001_002","B01001_002","B01001_026",
+                                     "B02001_002","B02001_003","B02001_004","B02001_005","B02001_006","B02001_008",
+                                     "B03001_003", 
+                                     "B01001_003","B01001_004","B01001_005","B01001_006","B01001_007","B01001_008","B01001_009",
+                                     "B01001_010","B01001_011","B01001_013","B01001_014","B01001_015","B01001_016","B01001_017",
+                                     "B01001_018","B01001_019","B01001_020","B01001_021","B01001_022","B01001_023","B01001_024","B01001_025",
+                                     "B01001_027","B01001_028","B01001_029","B01001_030","B01001_031","B01001_032","B01001_033","B01001_034",
+                                     "B01001_035","B01001_036","B01001_037","B01001_038","B01001_039","B01001_040","B01001_041","B01001_042","B01001_043",
+                                     "B01001_044","B01001_045","B01001_046","B01001_047","B01001_048","B01001_049",
+                                     "B06009_002","B06009_003", "B06009_004","B06009_005","B06009_006",
+                                     "B23025_002","B23025_005",
+                                     "C27007_001", "C27007_004", "C27007_007", "C27007_010", "C27007_014", "C27007_017", "C27007_020",
+                                     "B18135_001","B18135_007","B18135_012","B18135_018","B18135_023","B18135_029","B18135_034"), 
+                       year = 2011 + i) %>% 
+  pivot_wider(id_cols = c(GEOID, NAME), names_from = variable, values_from = estimate) %>% 
+    mutate(YEAR = 2011 + i, TotalPop = B01003_001, PovertyStatusDet = B17001_001, IncomeBelowPoverty = B17001_002,
+           AgeUnder18 = B01001_003 + B01001_004 + B01001_005 + B01001_006 + B01001_027 + B01001_028 + B01001_029 + B01001_030,
+           Age18to64 = B01001_007 + B01001_008 + B01001_009 + B01001_010 + B01001_011 + B01001_013 + B01001_014 + B01001_015 + 
+                       B01001_016 + B01001_017 + B01001_018 + B01001_019 + B01001_031 + B01001_032 + B01001_033 + B01001_034 +
+                       B01001_035 + B01001_036 + B01001_037 + B01001_038 + B01001_039 + B01001_040 + B01001_041 + B01001_042 + B01001_043, 
+           Age65andOver = B01001_020 + B01001_021 + B01001_022 + B01001_023 + B01001_024 + B01001_025 + 
+                          B01001_044 + B01001_045 + B01001_046 + B01001_047 + B01001_048 + B01001_049, 
+           Male = B01001_002, Female = B01001_026, 
+           White = B02001_002, Black = B02001_003, AIAN = B02001_004, Asian = B02001_005 + B02001_006, MR = B02001_008, 
+           Hispanic = B03001_003, 
+           EducLow = B06009_002, EducMid = B06009_003 + B06009_004, EducHigh = B06009_005 + B06009_006,
+           Unemployed = B23025_005, Unemp_denom = B23025_002,
+           MCD.denom = C27007_001	, Medicaid = C27007_004	 + C27007_007 + C27007_010	+ C27007_014 + C27007_017 + C27007_020,
+           Unins.denom = B18135_001, Uninsured = B18135_007 + B18135_012 + B18135_018 + B18135_023 + B18135_029 + B18135_034) %>% 
+    select(ZipCode = GEOID, NAME, YEAR, TotalPop:Uninsured))
+  
+  print(i)
+}
+census <- census[-1,]
+
+##########
+census$ZipCode <- substr(census$NAME, 7, 11)
+#census$ZipCode <- str_pad(census$ZipCode, 5, pad = "0")
+
+
+census %>% 
+  filter(YEAR == 2020) %>% 
+  select(ZipCode) %>% 
+  #unique() %>% 
+  table() %>% 
+  table()
+```
+
+
+## Merge with Older UDSs 1996-2011
+```{r}
+uds.cw <- read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_CW.csv", colClasses = "character") %>% 
+  mutate(link.ID = ifelse(is.na(ModernGranteeID) & !is.na(LongGrantID) & Year != 2010, LongGrantID, 
+                   ifelse(is.na(ModernGranteeID) & !is.na(GranteeID), GranteeID, BHCMIS.ID)), 
+         Year = as.integer(Year))
+
+
+uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  arrange(BHCMIS.ID, Year) %>% 
+  select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  filter(BHCMIS.ID == '010060' & Year %in% c(2007:2011)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T3B_L5A_CA, T3B_L6_CA, T3B_L1_CA, T3B_L8_CA, T3B_L4_CA, T3B_L12_CA)
+
+namevec <- c("BHCMIS.ID", "Year", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLang")
+
+#fins.revenue.expenses <- read_csv("FQHC_Revenue_vs_Expenses.csv")
+#cw <- read_excel("UDS-990 Crosswalk.xlsx")
+
+
+```
+
+
+
+
+## Clinic-level in Covariates 
+```{r}
+
+# Table 3B
+
+
+uds.3B.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+
+uds.3B.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table3B", skip = 2) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L8_Cd, T3b_L12_Ca) %>% rename(T3b_L26_Ca = T3b_L8_Cd)
+uds.3B.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+uds.3B.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+uds.3B.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table3B", skip = 1) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+uds.3B.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table3B", skip = 0) %>% select(BHCMISID, GrantNumber, T3b_L1_Cb, T3b_L3_Cb, T3b_L8_Ca, T3b_L5_Cb, T3b_L26_Ca, T3b_L12_Ca)
+
+namevec <- c("Year", "BHCMISID", "ModernGranteeID", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLang")
+uds.3B <- rbind(cbind(Year = 2012, uds.3B.2012),
+                cbind(Year = 2013, uds.3B.2013),
+                cbind(Year = 2014, uds.3B.2014),
+                  cbind(Year = 2015, uds.3B.2015),
+                  cbind(Year = 2016, uds.3B.2016),
+                  cbind(Year = 2017, uds.3B.2017),
+                  
+                  cbind(Year = 2018, uds.3B.2018),
+                  cbind(Year = 2019, uds.3B.2019), 
+                  cbind(Year = 2020, uds.3B.2020),
+                  cbind(Year = 2021, uds.3B.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+
+
+uds.3B <- rbind(
+  uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  arrange(BHCMIS.ID, Year) %>% 
+  select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  filter(Year %in% c(2007)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T3B_L5A_CA, T3B_L6_CA, T3B_L1_CA, T3B_L8_CA, T3B_L4_CA, T3B_L12_CA) %>% 
+    setNames(namevec), 
+  uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  arrange(BHCMIS.ID, Year) %>% 
+  select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  filter(Year %in% c(2008)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T3B_L5A_CA, T3B_L6_CA, T3B_L1_CA, T3B_L8_CA, T3B_L4_CA, T3B_L12_CA) %>% 
+    setNames(namevec),
+    uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  arrange(BHCMIS.ID, Year) %>% 
+  select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  filter(Year %in% c(2009)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T3B_L1_CB, T3B_L3_CB, T3B_L8_CA, T3B_L5_CB, T3B_L8_CD, T3B_L12_CA) %>% 
+    setNames(namevec), 
+  uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  arrange(BHCMIS.ID, Year) %>% 
+  select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  filter(Year %in% c(2010)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T3B_L1_CB, T3B_L3_CB, T3B_L8_CA, T3B_L5_CB, T3B_L8_CD, T3B_L12_CA) %>% 
+    setNames(namevec), 
+  uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  arrange(BHCMIS.ID, Year) %>% 
+  select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  filter(Year %in% c(2011)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T3B_L1_CB, T3B_L3_CB, T3B_L8_CA, T3B_L5_CB, T3B_L8_CD, T3B_L12_CA) %>% 
+    setNames(namevec), 
+  uds.3B)
+uds.3B %>% 
+  arrange(BHCMISID, Year)
+
+
+# Table 4
+uds.4.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+
+uds.4.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table4", skip = 2) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+
+uds.4.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+
+uds.4.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table4", skip = 1) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+uds.4.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table4", skip = 0) %>% select(BHCMISID, GrantNumber, T4_L1_Ca, T4_L2_Ca, T4_L3_Ca, T4_L4_Ca, T4_L5_Ca, T4_L16_Ca, T4_L23_Ca, T4_L7_Ca, T4_L7_Cb, T4_L8_Ca, T4_L8_Cb, T4_L9_Ca, T4_L9_Cb, T4_L10_Ca, T4_L10_Cb, T4_L11_Ca, T4_L11_Cb) 
+
+namevec <- c("Year", "BHCMISID", "ModernGranteeID", "<100%", "101-150%", "151-200%", ">200%", "Unknown", "FarmWorker", "Homeless", 
+             "Uninsured.young", "Uninsured.old", "MCD.young", "MCD.old", "MCR.young", "MCR.old", "OtherPublic.young", "OtherPublic.old", "COM.young", "COM.old")
+uds.4 <- rbind(cbind(Year = 2012, uds.4.2012),
+               cbind(Year = 2013, uds.4.2013),
+               cbind(Year = 2014, uds.4.2014),
+                  cbind(Year = 2015, uds.4.2015),
+                  cbind(Year = 2016, uds.4.2016),
+                  cbind(Year = 2017, uds.4.2017),
+                  
+                  cbind(Year = 2018, uds.4.2018),
+                  cbind(Year = 2019, uds.4.2019), 
+                  cbind(Year = 2020, uds.4.2020),
+                  cbind(Year = 2021, uds.4.2021)) %>% 
+  
+  rename_all(vars(namevec), function(x) namevec)
+
+
+uds.4 <- rbind(
+uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table4.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  filter(Year %in% c(2007, 2011)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T4_L1_CA, T4_L2_CA, T4_L3_CA, T4_L4_CA, T4_L5_CA, 
+         T4_L16_CA, T4_L23_CA, 
+         T4_L7_CA, T4_L7_CB, T4_L8_CA, T4_L8_CB, T4_L9_CA, T4_L9_CB, T4_L10_CA, T4_L10_CB, T4_L11_CA, T4_L11_CB) %>% 
+  setNames(namevec), 
+uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table4.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  filter(Year %in% c(2008:2010)) %>% 
+  select(Year, BHCMIS.ID, ModernGranteeID, T4_L1_CA, T4_L2_CA, T4_L3_CA, T4_L4_CA, T4_L5_CA, 
+         T4_L16_CA, T4_L23_CA, 
+         T4_L7_CMIA, T4_L7_CMIB, T4_L8_CMIA, T4_L8_CMIB, T4_L9_CMIA, T4_L9_CMIB, T4_L10_CMIA, T4_L10_CMIB, T4_L11_CMIA, T4_L11_CMIB) %>% 
+  setNames(namevec), 
+uds.4)
+
+
+uds.4 %>% 
+  arrange(BHCMISID, Year)
+
+
+
+# Put covariate tables together
+
+uds.covariates <- inner_join(uds.3B, uds.4, by = c("Year","BHCMISID","ModernGranteeID")) 
+
+
+for (i in 4:ncol(uds.covariates)){
+  uds.covariates[,i] <- as.numeric(gsub("-", "", uds.covariates[,i]))
+}
+
+
+#uds.covariates %>% filter(`Grant Number` == "H80CS24200")
+
+for (i in 1:nrow(uds.covariates)){
+  if (!is.na(uds.covariates[i,]$Total)) {
+uds.covariates[i,is.na(uds.covariates[i,])] <- 0
+} 
+}
+
+
+
+uds.covariates <-  uds.covariates %>% 
+    mutate(Pct.NHA = NHA / Total * 100,
+         Pct.NHB = NHB / Total * 100,
+         Pct.HL = HL / Total * 100,
+         Pct.NHW = NHW / Total * 100,
+         Pct.ESL = Eng2ndLang / Total * 100,
+         Pct.LessThan100pctFPL = ifelse(Total == Unknown, 100, `<100%` / (Total- Unknown) * 100),
+         Pct.LessThan200pctFPL = ifelse(Total == Unknown, 100, (`<100%` + `101-150%` + `151-200%`) / (Total - Unknown) * 100),
+         Pct.FarmWorker = FarmWorker / Total * 100,
+         Pct.Homeless = Homeless / Total * 100,
+         Pct.None = (Uninsured.young + Uninsured.old) / Total * 100, 
+         Pct.MCD = (MCD.young + MCD.old) / Total * 100, 
+         Pct.MCR = (MCR.young + MCR.old) / Total * 100, 
+         Pct.COM = (COM.young + COM.old) / Total * 100) %>% 
+    select(Year:ModernGranteeID, Total, Pct.NHA:Pct.COM)
+
+uds.covariates %>% 
+  arrange(BHCMISID, Year)
+
+
+```
+
+
+
+
+## Table 6A
+```{r}
+uds.6a.2011andBefore <- uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table6A.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  select(BHCMIS.ID, Year, T6A_L10_CA:T6A_L26D_CB) %>% 
+  filter(Year >= 2010) %>% 
+  rename(BHCMISID = BHCMIS.ID) %>% 
+  rename_all(.funs = toupper)
+
+uds.6a.2012 <- cbind(Year = 2012, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
+uds.6a.2013 <- cbind(Year = 2013, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
+      
+uds.6a.2014 <- cbind(Year = 2014, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper)
+uds.6a.2015 <- cbind(Year = 2015, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6A", skip = 2)) %>% rename_all(.funs = toupper)
+uds.6a.2016 <- cbind(Year = 2016, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+      
+uds.6a.2017 <- cbind(Year = 2017, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2018 <- cbind(Year = 2018, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2019 <- cbind(Year = 2019, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+      
+uds.6a.2020 <- cbind(Year = 2020, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6A", skip = 1)) %>% rename_all(.funs = toupper)
+uds.6a.2021 <- cbind(Year = 2021, read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6A", skip = 0)) %>% rename_all(.funs = toupper) %>% filter(!is.na(BHCMISID))
+
+uds.6a.2012[,-c(1:3)] <- data.frame(sapply(uds.6a.2012[,-c(1:3)], as.numeric))
+uds.6a.2013[,-c(1:3)] <- data.frame(sapply(uds.6a.2013[,-c(1:3)], as.numeric))
+
+uds.6a.2014[,-c(1:3)] <- data.frame(sapply(uds.6a.2014[,-c(1:3)], as.numeric))
+uds.6a.2015[,-c(1:3)] <- data.frame(sapply(uds.6a.2015[,-c(1:3)], as.numeric))
+uds.6a.2016[,-c(1:3)] <- data.frame(sapply(uds.6a.2016[,-c(1:3)], as.numeric))
+
+uds.6a.2017[,-c(1:3)] <- data.frame(sapply(uds.6a.2017[,-c(1:3)], as.numeric))
+uds.6a.2018[,-c(1:3)] <- data.frame(sapply(uds.6a.2018[,-c(1:3)], as.numeric))
+uds.6a.2019[,-c(1:3)] <- data.frame(sapply(uds.6a.2019[,-c(1:3)], as.numeric))
+
+uds.6a.2020[,-c(1:3)] <- data.frame(sapply(uds.6a.2020[,-c(1:3)], as.numeric))
+uds.6a.2021[,-c(1:3)] <- data.frame(sapply(uds.6a.2021[,-c(1:3)], as.numeric))
+
+uds.6a <- bind_rows(uds.6a.2012, uds.6a.2013, uds.6a.2014,
+      uds.6a.2015, uds.6a.2016, uds.6a.2017, uds.6a.2018, uds.6a.2019, uds.6a.2020, uds.6a.2021, uds.6a.2011andBefore) %>% 
+  arrange(BHCMISID, YEAR) %>% 
+  select(YEAR:T6A_L34_CB)
+
+uds.6a
+```
+
+
+## Table 6B Measures
+```{r}
+
+
+uds.6b.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 1) 
+uds.6b.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+uds.6b.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+uds.6b.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table6BClinicalmeasures", skip = 0) 
+
+
+uds.6b.names <- c("BHCMISID","GrantNumber","Imm.Num","Imm.Rate","imm.denom","Pap.Rate","Pap.Num","pap.denom",
+                  "crc.rate","crc.num","crc.denom", 
+                  "ChildBMI.rate","ChildBMI.num","ChildBMI.denom","AdultBMI.rate","AdultBMI.num","AdultBMI.denom", "asthma.rate","asthma.num","asthma.denom", 
+                  "cad.rate","cad.num","cad.denom", "ivd.rate","ivd.num","ivd.denom")
+
+uds.quality.6b <- rbind(
+  cbind(Year = 2012, uds.6b.2012[,c(1:8, 30:32, 9:14, 21:29)] %>% setNames(uds.6b.names)),
+  cbind(Year = 2013, uds.6b.2013[,c(1:8, 30:32, 9:14, 21:29)] %>% setNames(uds.6b.names)),
+  
+  cbind(Year = 2014, uds.6b.2014[,c(1:8, 27:29, 9:14, 18:26)] %>% setNames(uds.6b.names)),
+  cbind(Year = 2015, uds.6b.2015[,c(1:8, 27:29, 9:14, 18:26)] %>% setNames(uds.6b.names)),
+  cbind(Year = 2016, uds.6b.2016[,c(1:8, 27:29, 9:14, 18:26)] %>% setNames(uds.6b.names)),
+
+  cbind(Year = 2017, uds.6b.2017[,c(1:8, 27:29, 9:14, 18:26)] %>% setNames(uds.6b.names)),
+  cbind(Year = 2018, uds.6b.2018[,c(1:8, 27:29, 9:14, 18:26)] %>% setNames(uds.6b.names)),
+  cbind(Year = 2019, uds.6b.2019[,c(1:8, 27:29, 9:14, 18:26)] %>% setNames(uds.6b.names)),
+
+  cbind(Year = 2020, cbind(uds.6b.2020[,c(1:8, 27:29, 12:17)], NA, NA, NA, uds.6b.2020[,c(21:26)]) %>% setNames(uds.6b.names)),
+  cbind(Year = 2021, cbind(uds.6b.2021[,c(1:8, 27:29, 12:17)], NA, NA, NA, uds.6b.2021[,c(21:26)]) %>% setNames(uds.6b.names))) %>% 
+  mutate(imm.rate = as.numeric(Imm.Num) / as.numeric(imm.denom), 
+         pap.rate = as.numeric(Pap.Num) / as.numeric(pap.denom), 
+         imm.denom = as.numeric(imm.denom), 
+         pap.denom = as.numeric(pap.denom), 
+         crc.rate = as.numeric(crc.num) / as.numeric(crc.denom), 
+         crc.denom = as.numeric(crc.denom), 
+         childbmi.rate = as.numeric(as.numeric(ChildBMI.num) / as.numeric(ChildBMI.denom)), 
+         childbmi.denom = as.numeric(ChildBMI.denom),
+         adultbmi.rate = as.numeric(as.numeric(AdultBMI.num) / as.numeric(AdultBMI.denom)), 
+         adultbmi.denom = as.numeric(AdultBMI.denom),
+         asthma.rate = as.numeric(as.numeric(asthma.num) / as.numeric(asthma.denom)), 
+         cad.rate = as.numeric(as.numeric(cad.num) / as.numeric(cad.denom)), 
+         ivd.rate = as.numeric(as.numeric(ivd.num) / as.numeric(ivd.denom)), 
+         ) %>% 
+  select(Year, BHCMISID, GrantNumber, imm.rate, imm.denom, pap.rate, pap.denom, crc.rate, crc.denom, asthma.rate, cad.rate, ivd.rate, childbmi.rate, childbmi.denom, adultbmi.rate, adultbmi.denom) %>% 
+  
+  bind_rows(uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table6B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  filter(Year != 2008) %>% 
+    arrange(BHCMIS.ID, Year) %>% 
+  #select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  #filter(BHCMIS.ID == '010060') %>% 
+  select(BHCMIS.ID, Year, T6B_L10_N_CC:T6B_L11_D_CC, T6B_L10_CA:T6B_L11_CC, T6B_L12_CA:T6B_L13_CC) %>% 
+  mutate(imm.rate = ifelse(Year == 2009, T6B_L10_N_CC / T6B_L10_D_CC, 
+                    ifelse(Year %in% c(2010:2011), T6B_L10_CC / T6B_L10_CB, NA)), 
+         imm.denom = ifelse(Year == 2009, T6B_L10_D_CC, 
+                     ifelse(Year %in% c(2010:2011), T6B_L10_CA, NA)),
+         pap.rate = ifelse(Year == 2009, T6B_L11_N_CC / T6B_L11_D_CC, 
+                    ifelse(Year %in% c(2010:2011), T6B_L11_CC / T6B_L11_CB, NA)), 
+         pap.denom = ifelse(Year == 2009, T6B_L11_D_CC, 
+                     ifelse(Year %in% c(2010:2011), T6B_L11_CA, NA)), 
+         childbmi.rate = T6B_L12_CC / T6B_L12_CB, 
+         childbmi.denom = T6B_L12_CA, 
+         adultbmi.rate = T6B_L13_CC / T6B_L13_CB, 
+         adultbmi.denom = T6B_L13_CA ) %>% 
+  select(BHCMIS.ID, Year, imm.rate:adultbmi.denom) %>% 
+  rename(BHCMISID = BHCMIS.ID)) %>% 
+    arrange(BHCMISID, Year) 
+  
+
+## Removes FQHCs that were not open during those first 3 years of the study period
+uds.quality.6b <- uds.quality.6b %>% 
+  inner_join(uds.cw %>% mutate(STATE = toupper(STATE)) %>% unique() %>% mutate(STATE = ifelse(BHCMIS.ID == '010530', 'ME', 
+                                                                                       ifelse(BHCMIS.ID == '090090', 'AZ', STATE))) %>% 
+               select(BHCMIS.ID, STATE) %>% unique(), by = c("BHCMISID" = "BHCMIS.ID"))
+
+
+# uds.cw %>% mutate(STATE = toupper(STATE)) %>% 
+#   select(BHCMIS.ID, STATE)  %>% unique() %>% 
+#   group_by(BHCMIS.ID) %>% 
+#   mutate(row = row_number()) %>% 
+#   group_by(BHCMIS.ID) %>% 
+#   mutate(max.row = max(row)) %>% 
+#   filter(max.row > 1)
+#
+# uds.cw %>% 
+#   mutate(STATE = toupper(STATE)) %>% 
+#   select(BHCMIS.ID, STATE) %>% 
+#   group_by(BHCMIS.ID, STATE) %>% 
+#   summarise(n()) %>% 
+#   filter(BHCMIS.ID %in% c('010530','090090'))
+# 
+# uds.cw %>% filter(BHCMIS.ID == '010530')
+
+
+```
+
+## Table 6B - EHR or Sampling Used
+```{r}
+vec.years <- 2012:2021
+vec.skips <- rep(0, length(vec.years)) 
+vec.skips[c(4)] <- 2
+vec.skips[c(5,6,7,8,9)] <- 1
+vec.files <- paste("//Users/jhm65/Dropbox/Git/UDS/UDS-",vec.years, "-Full-Dataset.xlsx", sep = "")
+
+
+uds.quality.sampling.v.ehr <- uds.cw %>% 
+  inner_join(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table6B.csv"), by = c("link.ID" = "BHCMIS.ID", "Year")) %>% 
+  filter(Year != 2008) %>% 
+    arrange(BHCMIS.ID, Year) %>% 
+  #select(BHCMIS.ID:link.ID, T3B_L1_CA:T3B_L7_CC) %>% 
+  #filter(BHCMIS.ID == '010060') %>% 
+  #select(BHCMIS.ID, Year, T6B_L10_N_CC:T6B_L11_D_CC, T6B_L10_CA:T6B_L11_CC) %>% 
+  select(BHCMIS.ID, Year, T6B_L10_CA, T6B_L10_CB, T6B_L11_CA, T6B_L11_CB, T6B_L12_CA,	T6B_L12_CB, T6B_L13_CA, T6B_L13_CB) %>% 
+  cbind(T6B_L19_CA = NA,	T6B_L19_CB = NA) %>% 
+  rename(YEAR = Year)
+
+
+for (i in 1:length(vec.years)){
+read_excel(vec.files[i], sheet = "Table6B", skip = vec.skips[i])
+temp <- read_excel(vec.files[i], sheet = "Table6B", skip = vec.skips[i])%>% 
+  select(BHCMISID, T6b_L10_Ca, T6b_L10_Cb, T6b_L11_Ca, T6b_L11_Cb, T6B_L19_Ca,	T6B_L19_Cb, T6b_L12_Ca,	T6b_L12_Cb, T6b_L13_Ca, T6b_L13_Cb) %>% 
+    mutate(Year = vec.years[i])
+colnames(temp) <- toupper(colnames(temp))
+colnames(temp)[1] <- "BHCMIS.ID"
+
+
+  uds.quality.sampling.v.ehr <- uds.quality.sampling.v.ehr %>% 
+    rbind(temp) %>% 
+    arrange(BHCMIS.ID, YEAR)
+}
+
+
+uds.quality.sampling.v.ehr <- uds.quality.sampling.v.ehr %>% 
+  mutate(imm.ehr = ifelse(T6B_L10_CA == T6B_L10_CB, 1, 0), 
+         pap.ehr = ifelse(T6B_L11_CA == T6B_L11_CB, 1, 0), 
+         crc.ehr = ifelse(T6B_L19_CA == T6B_L19_CB, 1, 0),
+         childbmi.ehr = ifelse(T6B_L12_CA == T6B_L12_CB, 1, 0), 
+         adultbmi.ehr = ifelse(T6B_L13_CA == T6B_L13_CB, 1, 0)) %>% 
+  mutate(ehr = imm.ehr + pap.ehr + crc.ehr + childbmi.ehr + adultbmi.ehr)
+
+```
+
+
+## Table 7 Clinical Measures
+
+```{r}
+
+
+uds.7.2012 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2013 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2013-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+
+uds.7.2014 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2014-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2015 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2015-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
+uds.7.2016 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2016-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+
+uds.7.2017 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2017-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2018 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2018-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2019 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2019-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+
+uds.7.2020 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2020-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 0) 
+uds.7.2021 <- read_excel("//Users/jhm65/Dropbox/Git/UDS/UDS-2021-Full-Dataset.xlsx", sheet = "Table7Clinicalmeasures", skip = 1) 
+
+
+uds.7.names <- c("BHCMISID","GrantNumber","Race","Ethnicity","htn.total","htn.control","dm.total","dm.controlled")
+
+uds.quality.7 <- rbind(
+  cbind(Year = 2012, uds.7.2012[,c(1:6, 8:9)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  cbind(Year = 2013, uds.7.2013[,c(1:6, 8:9)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  
+  cbind(Year = 2014, uds.7.2014[,c(1:6, 8:9)] %>% setNames(uds.7.names)),
+  cbind(Year = 2015, uds.7.2015[,c(1:4, 8:9, 11, 14)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  cbind(Year = 2016, uds.7.2016[,c(1:4, 8:9, 11, 14)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+
+  cbind(Year = 2017, uds.7.2017[,c(1:4, 8:9, 11, 14)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  cbind(Year = 2018, uds.7.2018[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  cbind(Year = 2019, uds.7.2019[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+
+  cbind(Year = 2020, uds.7.2020[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled))),
+  cbind(Year = 2021, uds.7.2021[,c(1:4, 8:9, 11:12)] %>% setNames(uds.7.names) %>% mutate(dm.controlled = as.numeric(dm.total) - as.numeric(dm.controlled)))) %>% 
+  mutate(htn.rate = as.numeric(htn.control) / as.numeric(htn.total), 
+         dm.rate = as.numeric(dm.controlled) / as.numeric(dm.total), 
+         htn.total = as.numeric(htn.total), 
+         dm.total = as.numeric(dm.total)) %>% 
+  select(Year:Ethnicity, htn.total, htn.rate, dm.total, dm.rate) %>% 
+  
+  bind_rows(read.csv(file = "//Users/jhm65/Dropbox/Git/APMs/data_processed/Merged_Table7clin.csv") %>% 
+  select(Year, ModernGranteeID:dm.controlled) %>% 
+  rename(GrantNumber = ModernGranteeID) %>% 
+    mutate(htn.rate = as.numeric(htn.control) / as.numeric(htn.total), 
+         dm.rate = as.numeric(dm.controlled) / as.numeric(dm.total), 
+         htn.total = as.numeric(htn.total), 
+         dm.total = as.numeric(dm.total)) %>% 
+    select(Year:Ethnicity, htn.total, htn.rate, dm.total, dm.rate)) %>% 
+    arrange(GrantNumber, Year, Ethnicity, Race)
+  
+
+## Removes FQHCs that were not open during those first 3 years of the study period
+uds.quality.7 <- uds.quality.7 %>% 
+  inner_join(uds.cw %>% mutate(STATE = toupper(STATE)) %>% unique() %>% mutate(STATE = ifelse(BHCMIS.ID == '010530', 'ME', 
+                                                                                       ifelse(BHCMIS.ID == '090090', 'AZ', STATE))) %>% 
+               select(ModernGranteeID, STATE) %>% unique(), by = c("GrantNumber" = "ModernGranteeID")) %>% 
+  mutate(Race = ifelse(Race == '-', NA, Race),
+         Ethnicity = ifelse(Ethnicity == '-', NA, Ethnicity))
+
+
+uds.quality.7[is.na(uds.quality.7$htn.total),]$htn.total <- 0
+uds.quality.7[is.na(uds.quality.7$htn.rate),]$htn.rate <- 0
+uds.quality.7[is.na(uds.quality.7$dm.total),]$dm.total <- 0
+uds.quality.7[is.na(uds.quality.7$dm.rate),]$dm.rate <- 0
+
+
+uds.quality.7 <- uds.quality.7 %>% 
+   inner_join(uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID), by = c("GrantNumber" = "ModernGranteeID")) %>% 
+  arrange(Year, BHCMIS.ID, GrantNumber) %>% 
+  mutate(BHCMISID = ifelse(is.na(BHCMISID), BHCMIS.ID, BHCMISID))
+
+
+uds.quality.7 %>% 
+  filter(Race == " Total" | is.na(Race))%>% 
+  arrange(BHCMISID, Year) %>% 
+  group_by(Year, BHCMISID) %>% 
+  summarise(htn.rate = sum(htn.rate * htn.total) / sum(htn.total), 
+            htn.total = sum(htn.total), 
+            dm.rate = sum(dm.rate * dm.total) / sum(dm.total), 
+            dm.total = sum(dm.total)) %>% 
+  arrange(BHCMISID, Year)
+```
+
+
+```{r}
+# df.comp %>% 
+#   ggplot(aes(x = Year, y = dm.rate)) + geom_point() + geom_smooth()
+
+```
+
+
+## Financials
+```{r}
+cw <- read_excel("/Users/jhm65/Dropbox/Git/Data/UDS-990 Crosswalk.xlsx")
+
+fins.revenue.expenses <- read.csv("//Users/jhm65/Dropbox/Git/Data/FQHC_Revenue_vs_Expenses.csv", header = TRUE)
+names(fins.revenue.expenses) <- gsub("^X\\.", "", names(fins.revenue.expenses))
+names(fins.revenue.expenses) <- gsub("\\.\\.", "", names(fins.revenue.expenses))
+
+staffing <- read.csv("/Users/jhm65/Dropbox/Git/Data/FQHC_Staffing.csv")
+assliabs <- read.csv("/Users/jhm65/Dropbox/Git/Data/FQHC_Assets_and_Liabilities.csv")
+
+fins.revenue.expenses <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID) %>% 
+  left_join(cw, by = c("ModernGranteeID" = "Grant Number")) %>% 
+  left_join(fins.revenue.expenses, by = c("EIN" = "EIN")) %>% 
+  select(ModernGranteeID:EIN, form_year:fringe_rate) %>% 
+  left_join(staffing %>% select(EIN:Staff), by = c("EIN","form_year" = "Year")) 
+
+
+
+## Fixing some dumb mistake
+
+# fixing.cw <- cbind(NewEINs = EINs[c(1:21, 23:323, 325:499, 501:617, 619:669, 671:738,  740:782, 784:790, 792:819, 821:989, 991:1106, 1108:1184, 1186)], 
+#       assliabs %>% 
+#   mutate(ch = Year - lag(Year)) %>% 
+#   filter(is.na(ch) | ch < 0)) %>% 
+#   mutate(Y = lead(X) - 1) %>% 
+#   select(EIN, NewEINs, X, Y)
+# 
+# 
+# for (k in 1:max(assliabs$X)){
+#   assliabs[k,]$EIN <- assliabs[k,] %>% 
+#     left_join(fixing.cw, by = c("EIN")) %>% 
+#     filter(X.x >= X.y & X.x <= Y) %>% 
+#     select(NewEINs) %>% 
+#     unlist()
+# }
+
+fins.revenue.expenses <- fins.revenue.expenses %>% 
+  left_join(assliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) 
+
+```
+
+
+## APM History
+
+```{r}
+
+apm.history <- read_excel("/Users/jhm65/Dropbox/Git/APMs/data_raw/APM_History.xlsx") %>%
+ mutate(Class = ifelse(is.na(Year), "0 - Control", Classification))
+
+```
+
+## Full dataset
+
+```{r}
+
+
+## Broader definitions 5 / 7 quality measures significant improvements overall
+# included.years <- 2009:2021
+# included.treat <- 2013:2021
+
+## Original good filters
+# included.years <- 2009:2019
+# included.treat <- 2013:2019
+
+
+df.comp <- uds.covariates %>% 
+  select(Year:BHCMISID, Total:Pct.COM) %>% 
+  inner_join(uds.cw %>% select(BHCMIS.ID, STATE) %>% 
+               mutate(STATE = toupper(STATE)) %>% 
+               unique() %>% mutate(STATE = ifelse(BHCMIS.ID == '010530', 'ME', ifelse(BHCMIS.ID == '090090', 'AZ', STATE))) %>% unique(), by = c("BHCMISID" = "BHCMIS.ID")) %>% 
+  select(BHCMISID, Year, STATE, Total:Pct.COM) %>% 
+  arrange(BHCMISID, Year) %>% 
+  left_join(uds.6a, by = c("BHCMISID","Year" = "YEAR")) %>% 
+  left_join(uds.quality.6b %>% select(Year, BHCMISID, imm.rate:adultbmi.denom), by = c("BHCMISID","Year")) %>% 
+  left_join(uds.quality.7 %>% 
+  filter(Race == " Total" | is.na(Race)) %>% 
+  group_by(Year, BHCMISID) %>% 
+  summarise(htn.rate = sum(htn.rate * htn.total) / sum(htn.total), 
+            htn.total = sum(htn.total), 
+            dm.rate = sum(dm.rate * dm.total) / sum(dm.total), 
+            dm.total = sum(dm.total)) %>% 
+  arrange(BHCMISID, Year), by = c("BHCMISID","Year")) %>% 
+    left_join(fins.revenue.expenses, by = c("BHCMISID" = "BHCMIS.ID", "Year" = "form_year")) %>% 
+  inner_join(apm.history %>% rename(att = Year), by = c("STATE" = "Postal Code")) %>% 
+  ungroup() %>% 
+  mutate(att = ifelse(is.na(att), 0, att)) %>% 
+  mutate(ID = as.numeric(as.factor(BHCMISID))) %>% 
+  arrange(BHCMISID) %>% 
+  mutate(ACA = ifelse((STATE %in% c('MI','NH') & Year >= 2014) |
+                    (STATE %in% c('PA','IN','AK') & Year >= 2015) |
+                    (STATE %in% c('MT','LA') & Year >= 2016) |
+                    (STATE %in% c('VA','ME') & Year >= 2019) |
+                    (STATE %in% c('ID','UT','NE') & Year >= 2020) |
+                    (STATE %in% c('OK','MO') & Year >= 2021) |
+                    (STATE %in% c('AZ','AR','CA','CO','CT','DE','DC','HI','IL','IA','KY','MD','MA','MN','NV','NJ','NM','NY','ND','OH','OR','PA','RI','VT','VA','WA') & Year >= 2014), 1, 0))
+
+class.vec <- rep(sort(unique(df.comp$Classification)), table(df.comp$Classification))
+
+
+set.seed(123) #432
+
+df.comp <- df.comp %>% 
+  group_by(ID) %>% 
+  mutate(Class.random = ifelse(Class == "0 - Control", sample(class.vec, size = 1, replace = T), Class), 
+         att.random = ifelse(Class == "0 - Control", sample(included.treat, size = 1, replace = T), att)) %>% 
+                                 mutate(Tx = ifelse(Year >= att & att > 0, 1, 0)) %>% 
+  filter(Year %in% included.years) %>% 
+  mutate(year.rel = as.factor(ifelse(att.random > 0, Year - att.random, NA)), 
+         Treatment = ifelse(att > 0, 1, 0)) %>% 
+  select(BHCMISID:STATE, Name:ID, ACA:Treatment, Total:dm.total, fs_contributions:Liabilities) 
+
+df.comp <- df.comp %>% 
+  left_join(df.comp %>% 
+  group_by(BHCMISID) %>% 
+  summarise(counts = n()) %>% filter(counts == length(included.years)), by = c("BHCMISID")) %>% 
+  group_by(BHCMISID) %>% 
+  mutate(closed = ifelse(is.na(counts) & Year == max(Year), 1, 0)) #%>%  filter(APM %in% c('Yes','No'))
+
+df.comp$year.rel <- relevel(as.factor(df.comp$year.rel), ref = "-1") 
+
+## Filter for balanced panel, remove closures and late openings
+df.comp <- df.comp %>%
+  left_join(df.comp %>% summarise(Counts = n(), MinYear = min(Year)), by = c("BHCMISID")) %>%
+  filter(Counts == length(included.years)) #  filter(Counts < 13 & MinYear == 2009)    filter(Counts == length(included.years))
+
+## Remove some weird shit in CT
+df.comp <- df.comp %>% 
+  filter(BHCMISID != "01E00010") %>% 
+                mutate(HIV.prev = T6A_L1AND2_CB / Total * 100, 
+         HIV.care = T6A_L1AND2_CA / T6A_L1AND2_CB,
+         
+         HepC.prev = T6A_L4B_CB / Total * 100,
+         HepC.care = T6A_L4B_CA / T6A_L4B_CB,
+
+         Asthma.prev = T6A_L5_CB / Total * 100,
+         Asthma.care = T6A_L5_CA / T6A_L5_CB,
+
+         # AbnormalPap.prev = T6A_L8_CB / Total * 100,
+         # AbnormalPap.care = T6A_L8_CA / T6A_L8_CB,
+         #
+         # ImmunizationsGiven.prev = T6A_L24_CB / Total * 100,
+         # ImmunizationsGiven.care = T6A_L24_CA / T6A_L24_CB,
+         
+         HeartDisease.prev = T6A_L10_CB / Total * 100, 
+         HeartDisease.care = T6A_L10_CA / T6A_L10_CB,
+         
+         # OverweightOrObesity.prev = T6A_L14A_CB / Total * 100, 
+         # OverweightOrObesity.care = T6A_L14A_CA / T6A_L14A_CB, 
+         
+         Depression.prev = T6A_L19A_CB / Total * 100, 
+         Depression.care = T6A_L19A_CA / T6A_L19A_CB, 
+         
+         Diabetes.prev = T6A_L9_CB / Total * 100, 
+         Diabetes.care = T6A_L9_CA / T6A_L9_CB, 
+         
+         Hypertension.prev = T6A_L11_CB / Total * 100, 
+         Hypertension.care = T6A_L11_CA / T6A_L11_CB) %>%  #%>%  filter(STATE != 'CT')
+select(BHCMISID:FIPS, Total:Pct.COM, HIV.prev:Hypertension.care , imm.rate:MinYear)
+
+
+
+```
+
+
+
+
+## Classify FQHCs into Treated, control based on zip codes
+
+```{r}
+
+
+clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
+  #filter(Year >= included.years[1]) %>% 
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>%
+  arrange(desc(Clinics))
+
+
+# Identify clinics in competitive zip codes
+clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+  filter(Year >= included.years[1]) %>%
+  select(`BHCMIS ID`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`BHCMIS ID`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
+  filter(`2010` == 1 & `2011` == 1) %>%  #  & `2012` == 1 & `2013` == 1 & `2014` == 1 & `2015` == 1 & `2016` == 1) %>%   
+  #filter(`2014` == 1 & `2015` == 1) %>%  
+  #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
+  #filter(is.na(NewClinicID)) %>%
+  select(`BHCMIS ID`:`2021`) %>% 
+  pivot_longer(cols = c(`2010`:`2021`)) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  filter(min(value) == 1 ) %>% 
+  #filter(max(value) == last(value)) %>% 
+  mutate(Tx = ifelse(value > 1, 1, 0)) 
+
+
+# Classify clinics by introduction of competition
+comp.initial <- clinics.comp %>%  #left_join(clinics.comp %>% mutate(Year = as.numeric(name)), uds.zip.totals, by = c("BHCMIS ID", "name" = "Reporting Year")) %>% 
+  mutate(Year = as.numeric(name)) %>% 
+  left_join(uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+              filter(Year >= included.years[1]) %>%
+  group_by(`BHCMIS ID`, Year) %>% 
+  summarise(Sites = n()), by = c("BHCMIS ID","Year")) %>% 
+  ungroup() %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att = min(ifelse(Tx == 0, 2, 1)*Year, na.rm = TRUE) ) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att = ifelse(Att < 2022, Att, 0)) %>% 
+  ungroup() %>% 
+  mutate(ID = as.numeric(factor(`BHCMIS ID`)))
+
+# Expandors vs Expandees
+comp.initial <- comp.initial %>% 
+  left_join(
+      left_join(comp.initial %>% select(`BHCMIS ID`, Att) %>% unique(), uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+                  filter(Year >= included.years[1]) %>%
+        select(`BHCMIS ID`, Zip, Year) %>% 
+        group_by(`BHCMIS ID`, Zip) %>% 
+        summarise(YearFirstInZip = min(Year)) %>% 
+        filter(YearFirstInZip %notin% c(2010)) %>% 
+        select(`BHCMIS ID`, YearFirstInZip) %>% 
+        unique(), by = c("BHCMIS ID")) %>% #filter(`BHCMIS ID` == "H80CS00101") %>% 
+        mutate(Expandor = ifelse(is.na(YearFirstInZip) | Att != YearFirstInZip, 0, 1)) %>%  #  is.na(YearFirstInZip) | Att != YearFirstInZip
+        group_by(`BHCMIS ID`) %>% summarise(Expandor = max(Expandor)), by = c("BHCMIS ID")) 
+
+
+dfc <- comp.initial %>% filter(Expandor == 0) %>% 
+  left_join(df.comp, by = c("BHCMIS ID" = "BHCMISID", "Year"))
+```
+
+
+## Finalize the core set of measures, adjust Altman components for inf estimates
+```{r}
+
+dfc <- dfc %>% 
+  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100, 
+         Qcomp.w = (dm.rate * dm.total + htn.rate * htn.total + crc.rate * crc.denom + pap.rate * pap.denom + childbmi.rate * childbmi.denom + adultbmi.rate * adultbmi.denom ) / 
+           ( dm.total +  htn.total +  crc.denom +  pap.denom +  childbmi.denom +  adultbmi.denom ) * 100, 
+               CostPerPat = ngla_expense / Total, 
+               months_of_cash = as.numeric(months_of_cash),
+               ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
+               quick_ratio = as.numeric(quick_ratio),
+               Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_net_gain_loss / Assets, #Assets, 
+               Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities, 
+            Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
+            LiabPctAssets = Liabilities / Assets, 
+            Eff = ngla_prog_serv_revenue / Assets, 
+            LiabPctRev = ngla_prog_serv_revenue / ngla_expense) 
+
+dfc <- dfc %>% 
+  mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
+         Profitability = ifelse(is.infinite(Profitability), NA, Profitability), 
+         Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency), 
+         NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
+         #Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
+         Altman = 0.18 * quick_ratio + 0.3 * Profitability + 0.81 * Efficiency + 0.14 * NetWorth) %>% 
+  mutate(Att.random = ifelse(Att > 0, Att, NA), 
+         Distress = ifelse(Altman < 2.6, 1, 0))
+
+vec.atts <- rep(c(2012:2021), (table(comp.initial$Att) / 12)[-1])
+
+set.seed(123)
+dfc <- rbind(dfc %>% filter(Att > 0), dfc %>% 
+  filter(Att == 0) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att.random = sample(size = 1, vec.atts, replace = TRUE))) %>% 
+  mutate(year.rel = Year - Att.random)
+
+######adjust Altman components for inf estimates
+  
+```
+
+
+
+## Write the file
+```{r}
+# write_csv(dfc, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+# write.csv(uds.sites.full, file = "/Users/jhm65/Dropbox/Git/Competition/data_processed/sites_geocoded.csv")
+```
+
+
