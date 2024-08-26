@@ -1047,6 +1047,10 @@ apm.history <- read_excel("/Users/markow/Dropbox/Git/APMs/data_raw/APM_History.x
 # included.years <- 2009:2019
 # included.treat <- 2013:2019
 
+ included.years <- 2014:2023
+ included.treat <- 2016:2023
+
+
 
 df.comp <- uds.covariates %>% 
   select(Year:BHCMISID, Total:Pct.COM) %>% 
@@ -1170,12 +1174,12 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   group_by(`BHCMIS ID`, Year) %>% 
   summarise(Clinics = max(Clinics)) %>% 
   pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
-  filter(`2010` == 1 & `2011` == 1) %>%  #  & `2012` == 1 & `2013` == 1 & `2014` == 1 & `2015` == 1 & `2016` == 1) %>%   
-  #filter(`2014` == 1 & `2015` == 1) %>%  
+  #filter(`2011` == 1 & `2012` == 1 ) %>%  #  & `2012` == 1 & `2013` == 1 & `2014` == 1 & `2015` == 1 & `2016` == 1) %>%   
+  filter(`2014` == 1 & `2015` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
-  select(`BHCMIS ID`:`2021`) %>% 
-  pivot_longer(cols = c(`2010`:`2021`)) %>% 
+  select(`BHCMIS ID`:`2023`) %>% 
+  pivot_longer(cols = c(`2014`:`2023`)) %>% 
   group_by(`BHCMIS ID`) %>% 
   filter(min(value) == 1 ) %>% 
   #filter(max(value) == last(value)) %>% 
@@ -1193,7 +1197,7 @@ comp.initial <- clinics.comp %>%  #left_join(clinics.comp %>% mutate(Year = as.n
   group_by(`BHCMIS ID`) %>% 
   mutate(Att = min(ifelse(Tx == 0, 2, 1)*Year, na.rm = TRUE) ) %>% 
   group_by(`BHCMIS ID`) %>% 
-  mutate(Att = ifelse(Att < 2024, Att, 0)) %>% 
+  mutate(Att = ifelse(Att < max(included.treat)+1, Att, 0)) %>% 
   ungroup() %>% 
   mutate(ID = as.numeric(factor(`BHCMIS ID`)))
 
@@ -1205,7 +1209,7 @@ comp.initial <- comp.initial %>%
         select(`BHCMIS ID`, Zip, Year) %>% 
         group_by(`BHCMIS ID`, Zip) %>% 
         summarise(YearFirstInZip = min(Year)) %>% 
-        filter(YearFirstInZip %notin% c(2010)) %>% 
+        filter(YearFirstInZip %notin% min(included.years)) %>% 
         select(`BHCMIS ID`, YearFirstInZip) %>% 
         unique(), by = c("BHCMIS ID")) %>% #filter(`BHCMIS ID` == "H80CS00101") %>% 
         mutate(Expandor = ifelse(is.na(YearFirstInZip) | Att != YearFirstInZip, 0, 1)) %>%  #  is.na(YearFirstInZip) | Att != YearFirstInZip
@@ -1247,7 +1251,7 @@ dfc <- dfc %>%
   mutate(Att.random = ifelse(Att > 0, Att, NA), 
          Distress = ifelse(Altman < 2.6, 1, 0))
 
-vec.atts <- rep(c(2012:2021), (table(comp.initial$Att) / 12)[-1])
+vec.atts <- rep(included.treat, (table(comp.initial$Att) / 12)[-1])
 
 set.seed(123)
 dfc <- rbind(dfc %>% filter(Att > 0), dfc %>% 
@@ -1266,6 +1270,7 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
 ```{r}
 # write_csv(dfc, file = "/Users/markow/Dropbox/Git/Competition/data_processed/manuscript_analyticalfile.csv")
 # write.csv(uds.sites.full, file = "/Users/markow/Dropbox/Git/Competition/data_processed/manuscript_sites_geocoded.csv")
+
 ```
 
 
