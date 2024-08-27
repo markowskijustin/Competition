@@ -1975,7 +1975,9 @@ qnats2 <- seq(1/5, 1, by = 1/5)
 
  
    model.dist.quants <-  did2s(
-      data = df.spill3 %>% filter((Dist == 0 & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year & Att > 0, 1, Tx)), 
+      data = df.spill3 %>% filter((Dist == 0 & Att > 0) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year & Att > 0, 1, Tx))%>% 
+        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))),  
       yname = "NumberofPatients", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -1986,9 +1988,11 @@ qnats2 <- seq(1/5, 1, by = 1/5)
     tes <- data.frame(model.dist.quants$coeftable)[1,]
     
     
-  for (i in 1:6){
+  for (i in 1:5){
       model.dist.quants <-  did2s(
-      data = df.spill3  %>% filter((Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i]) & Att > 0 ) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year & Att > 0 , 1, Tx)) , 
+      data = df.spill3  %>% filter((Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i]) & Att > 0 ) | Att == 0) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% mutate(Tx = ifelse(Att - 1 == Year & Att > 0 , 1, Tx)) %>% 
+        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))), 
       yname = "NumberofPatients", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -2002,7 +2006,7 @@ qnats2 <- seq(1/5, 1, by = 1/5)
     tes
 
 zp.pats <- tes[-1,] %>% 
-  cbind(Quantile = 1:6) %>% 
+  cbind(Quantile = 1:5) %>% 
   ggplot(aes(x = Quantile, y = Estimate)) + geom_point(position = position_dodge(0.9), color = 'goldenrod', size = 3) + geom_errorbar(aes(ymin=Estimate-1.96*Std..Error, ymax=Estimate+1.96*Std..Error), width=.25, position = position_dodge(0.9), color = 'goldenrod', size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) + 
@@ -2027,7 +2031,8 @@ quantile(df.spill3$Dist, 0.15, na.rm = TRUE)
 
 model <- did2s(
       data = df.spill3  %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
-        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+        #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
+        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
                                     ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
       yname = "Total.Hours", 
       treatment = "Tx",
@@ -2040,8 +2045,8 @@ model <- did2s(
 TEs.strat.far <- data.frame(model$coeftable)[1,]
 
 for (i in 11:19){
-  df.temp <- df.spill3 %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 )%>% 
-        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
+  df.temp <- df.spill3 %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) #%>% 
+        #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
   df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
   names(df.temp)[1:6] <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
   model <- did2s(
@@ -2060,8 +2065,9 @@ for (i in 11:19){
 
 
 model <- did2s(
-      data = df.spill3  %>% filter((Dist == 0 & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
-        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+      data = df.spill3  %>% filter((Dist < quantile(Dist, 0.15) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+        #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
+        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
                                     ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
       yname = "Total.Hours", 
       treatment = "Tx",
@@ -2074,8 +2080,7 @@ model <- did2s(
 TEs.strat.close <- data.frame(model$coeftable)[1,]
 
 for (i in 11:19){
-  df.temp <- df.spill3 %>% filter((Dist == 0 & Att > 0) | Att == 0 ) %>% 
-        mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
+  df.temp <- df.spill3 %>% filter((Dist < quantile(Dist, 0.15) & Att > 0) | Att == 0 ) #%>%  mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
   df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
   names(df.temp)[1:6] <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
   model <- did2s(
@@ -2124,10 +2129,6 @@ sum(df.spill3 %>% filter(Att > 0 & Dist < 200 & Dist > 62 & Year == Att - 1) %>%
 ## UPDATED FORM : 3.37 - 0.054x from 62km through 200 is 7%
 
 
-
-df.spill3  %>% filter(Dist > quantile(Dist, qnats1[i]) & Dist <= quantile(Dist, qnats2[i])) %>% 
-  group_by(Tx) %>% 
-  summarise(mean(Sites))
 
 
 
