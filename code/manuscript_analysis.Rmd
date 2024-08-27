@@ -2091,6 +2091,7 @@ cbind(colnames(df.spill3)[10:19], TEs.strat.far %>% mutate(Estimate = round(Esti
 ```{r}
 
 
+
 df.spill3  %>% filter(Dist > quantile(Dist, 0.8) ) %>% 
   filter(Att > 0) %>% 
   group_by(Tx) %>% 
@@ -2130,10 +2131,15 @@ areaUnder$value / sum(df.spill3 %>% filter(Att > 0 & Dist < 200 & Dist > cutpoin
 areaUnder <- integrate(f = integrand, lower = 0, upper = cutpoint)
 areaUnder$value / sum(df.spill3 %>% filter(Att > 0 & Dist < cutpoint & Dist > 0 & Year == Att - 1) %>% select(Total.Hours))
 
+df.spill3 %>% 
+  filter(Year == Att - 1) %>% 
+  mutate(EstimatedChange = 2.167812 + -0.0427669*Dist) %>% 
+  summarise(sum(abs(EstimatedChange)) / sum(Total.Hours))
+
 
 
 did2s(
-      data = df.spill3 %>% 
+      data = df.spill3 %>% #filter((Dist > quantile(Dist, 0.4) & Dist < quantile(Dist, 0.6) & Att > 0) | Att == 0 ) %>% 
         mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
                                     ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))), 
       yname = "Total.Hours", 
@@ -2144,6 +2150,20 @@ did2s(
       verbose = FALSE
     ) 
 
+
+
+## Alternative Calculation
+
+mean(df.spill3[df.spill3$Dist < quantile(df.spill3$Dist, probs = c(0.15)),]$Dist)
+mean(df.spill3[df.spill3$Dist > quantile(df.spill3$Dist, probs = c(0.85)),]$Dist)
+
+df.spill3 %>% filter(Att > 0 & Dist < 0.33476343 & Year == Att - 1) %>% summarise(sum(Total.Hours), n())
+df.spill3 %>% filter(Att > 0 & Dist > 157.1606 & Year == Att - 1) %>% summarise(sum(Total.Hours), n())
+
+df.spill3 %>% 
+  filter(Year == Att - 1) %>% 
+  mutate(EstimatedChange = 6 + -0.039*Dist) %>% 
+  summarise(sum(abs(EstimatedChange)) / sum(Total.Hours))
 
 ```
 
