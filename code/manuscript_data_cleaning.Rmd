@@ -485,7 +485,16 @@ namevec <- c("BHCMIS.ID", "Year", "NHA", "NHB", "HL", "NHW", "Total", "Eng2ndLan
 
 ```
 
+## Total Patients served by Year
+```{r}
+read.csv(file = "//Users/markow/Dropbox/Git/APMs/data_processed/Merged_Table3B.csv") %>% 
+  select(Year, T3B_L4_CA) %>% 
+  group_by(Year) %>% 
+  summarise(sum(T3B_L4_CA, na.rm = TRUE))
 
+
+
+```
 
 
 ## Clinic-level in Covariates 
@@ -1272,5 +1281,9 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
 # write.csv(uds.sites.full, file = "/Users/markow/Dropbox/Git/Competition/data_processed/manuscript_sites_geocoded.csv")
 
 ```
+
+
+
+
 
 
