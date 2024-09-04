@@ -2799,38 +2799,6 @@ df.p %>%
     
 ```
 
-## Distribution of FQHC sites nationwide
-
-```{r}
-
-
-p.grant <- census %>% 
-  filter(YEAR == 2021) %>% 
-  group_by(ZipCode, YEAR) %>% 
-  summarise(Pct.Poverty = IncomeBelowPoverty / PovertyStatusDet * 100, 
-            Pct.MCD = Medicaid / MCD.denom * 100, 
-            Pct.Unins = Uninsured / Unins.denom * 100) %>% 
-  left_join(uds.sites.full %>% 
-  filter(Year == 2021) %>% 
-  group_by(Zip, Year) %>% 
-  summarise(Counts = n()), by = c("ZipCode" = "Zip", "YEAR" = "Year")) %>% 
-  mutate(Counts = ifelse(is.na(Counts), 0, Counts), 
-         Counts_Bin = ifelse(Counts == 0, 0, 100), 
-         `Poverty, %` = round(Pct.Poverty, digits = -1),
-         `Medicaid, %` = round(Pct.MCD, digits = -1), 
-         `Uninsured, %` = round(Pct.Unins, digits = -1)) %>% 
-  pivot_longer( `Poverty, %`:`Uninsured, %`) %>% 
-  ungroup() %>% group_by(name, value) %>% 
-  summarise(`# Zip Codes` = n(), PropWithCHC = mean(Counts_Bin)) %>% 
-  filter(!is.na(value)) %>% 
-  rename(Measure = name) %>% 
-  ggplot(aes(x = value, y = PropWithCHC, group_by(Measure))) + geom_point(aes(size =`# Zip Codes`, color = Measure)) + geom_line(aes(group = Measure, color = Measure))+
-  theme_tufte_revised() + xlab("Percent, %") + ylab("Zips with a CHC, %") + ylim(0, 37) + #facet_wrap(~Measure) +
-  theme(axis.text=element_text(size=10), axis.title=element_text(size=10,face="bold"), strip.text = element_text(size=12,face="bold"))
-p.grant
-
-
-```
 
 
 
