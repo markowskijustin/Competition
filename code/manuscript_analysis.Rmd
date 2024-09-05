@@ -2019,7 +2019,7 @@ model <- did2s(
         #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
         mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
                                     ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
-      yname = "Total.Hours", 
+      yname = "Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -2054,7 +2054,7 @@ model <- did2s(
         #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
         mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
                                     ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
-      yname = "Total.Hours", 
+      yname = "Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
         second_stage = ~ i(Tx, ref = FALSE)  ,
@@ -2082,7 +2082,7 @@ for (i in 11:19){
 
 
 
-cbind(colnames(df.spill3)[10:19], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[c(6:10, 1:2),]
+cbind(colnames(df.spill3)[10:19], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[c(6:10, 1:5),]
 ```
 
 
@@ -2283,7 +2283,7 @@ df.spill3 %>%
 df.spill3 %>% 
    mutate(DistFilter = ifelse(Dist < quantile(Dist, 0.15), "Near", 
                               ifelse(Dist > quantile(Dist, 0.85), "Far", NA))) %>% 
-  filter(!is.na(DistFilter) & Year == 2012) %>% 
+  filter(!is.na(DistFilter) & Year < 2013) %>% 
   select(DistFilter, Tx:NumberofPatients, ALAND10:l.popdensity) %>% 
   inner_join(census, by = c("Zip" = "ZipCode", "Year" = "YEAR")) %>% 
   select(DistFilter, TotalPop:Uninsured) %>% 
@@ -2664,11 +2664,10 @@ p.rival.dist <- df.z.dist %>%
    scale_y_continuous(name = 'Number of Rivals', sec.axis = sec_axis(~./81*1000, name = "Cummulative percentage (%)")) + 
   theme_tufte_revised() + ggtitle("FQHC Rivals by Distance from Service Area to New Competitive Zip") + xlab("Distance Travelled (km)")
 
-
-
 p.rival.dist
 
 
+ggsave(filename = "AppendixFigures10.png", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Figures", plot = p.rival.dist, width = 10, height = 6)
 ```
 
 ## Map of where competitive zip codes are
@@ -2775,7 +2774,9 @@ df.p %>%
 
     
     
-    df.z.dist %>% left_join(df.comp, by = c("BHCMIS ID.y" = "BHCMISID", "Year")) %>% 
+    df.z.dist %>% 
+      mutate(Year = Year - 1) %>% 
+      left_join(df.comp, by = c("BHCMIS ID.y" = "BHCMISID", "Year")) %>% 
       mutate(Type = "Incumbent") %>% 
       rbind(df.z.dist %>% left_join(df.comp, by = c("BHCMIS ID.x" = "BHCMISID", "Year")) %>% mutate(Type = "Rival")) %>% 
         mutate(Quality = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100) %>% 
@@ -2783,17 +2784,20 @@ df.p %>%
              Liquidity = (Assets - Liabilities) / Assets,
                Profitability = ngla_net_gain_loss / Assets, #Assets, 
                Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
-               NetWorth = (Assets - Liabilities) / Liabilities) %>% 
+               NetWorth = (Assets - Liabilities) / Liabilities, 
+             logPatsPerStaff = log(Total / Staff)) %>% 
       mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
          Profitability = ifelse(is.infinite(Profitability), NA, Profitability), 
          Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency), 
          NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
          #Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
          Altman = 0.18 * quick_ratio + 0.3 * Profitability + 0.81 * Efficiency + 0.14 * NetWorth) %>% 
-      select(Type, Quality, Total, Altman, Pct.NHA:Pct.COM) %>% 
+      select(Type, Quality, Total, Altman, logPatsPerStaff, Pct.NHA:Pct.COM) %>% 
           tbl_summary(by = Type, 
-                statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
-  add_p()
+                statistic = list(all_continuous() ~ "{mean} ({sd})"), 
+                digits = list(everything() ~ c(1)), 
+                missing = "no") %>% 
+  add_p(test = everything() ~ "t.test", pvalue_fun = function(x) style_pvalue(x, digits = 3))
 
     
     
