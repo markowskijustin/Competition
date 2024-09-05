@@ -1056,8 +1056,8 @@ apm.history <- read_excel("/Users/markow/Dropbox/Git/APMs/data_raw/APM_History.x
 # included.years <- 2009:2019
 # included.treat <- 2013:2019
 
- included.years <- 2014:2023
- included.treat <- 2016:2023
+included.years <- 2010:2021
+included.treat <- 2013:2019
 
 
 
