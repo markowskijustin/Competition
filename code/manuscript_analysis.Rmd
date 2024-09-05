@@ -2015,10 +2015,10 @@ summary(df.spill3$l.popdensity)
 quantile(df.spill3$Dist, 0.15, na.rm = TRUE)
 
 model <- did2s(
-      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)),# %>% 
         #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
-        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
-                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
+        #mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+        #                            ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
       yname = "Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -2029,7 +2029,7 @@ model <- did2s(
 
 TEs.strat.far <- data.frame(model$coeftable)[1,]
 
-for (i in 11:19){
+for (i in 10:19){
   df.temp <- df.spill3 %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) #%>% 
         #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
   df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
@@ -2050,10 +2050,10 @@ for (i in 11:19){
 
 
 model <- did2s(
-      data = df.spill3  %>% filter((Dist < quantile(Dist, 0.15) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+      data = df.spill3  %>% filter((Dist < quantile(Dist, 0.15) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)),# %>% 
         #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
-        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
-                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
+       # mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+        #                            ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
       yname = "Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -2064,7 +2064,7 @@ model <- did2s(
 
 TEs.strat.close <- data.frame(model$coeftable)[1,]
 
-for (i in 11:19){
+for (i in 10:19){
   df.temp <- df.spill3 %>% filter((Dist < quantile(Dist, 0.15) & Att > 0) | Att == 0 ) #%>%  mutate(Tx = ifelse(Att - 1 == Year, 1, Tx))
   df.temp <- df.temp[,c(1:5, i, 16:ncol(df.spill3))] 
   names(df.temp)[1:6] <- c("Tx", "D", "Dist", "Year", "Zip", 'Outcome')
@@ -2082,7 +2082,25 @@ for (i in 11:19){
 
 
 
-cbind(colnames(df.spill3)[10:19], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[c(6:10, 1:5),]
+cbind(colnames(df.spill3)[c(30, 10:19)], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[c(7:11, 2, 1, 3:6),]
+
+
+did2s(
+      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
+        mutate(Outcome = ifelse(Sites == 0, 0, Schedule / Sites)), 
+        #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
+       # mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+        #                            ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ 1 | Zip + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  ,
+        cluster_var = "Zip",
+      verbose = FALSE
+    ) 
+
+
+
 ```
 
 
@@ -2139,9 +2157,9 @@ df.spill3 %>%
 
 
 did2s(
-      data = df.spill3 %>% #filter((Dist > quantile(Dist, 0.4) & Dist < quantile(Dist, 0.6) & Att > 0) | Att == 0 ) %>% 
-        mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
-                                    ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))), 
+      data = df.spill3, #%>% #filter((Dist > quantile(Dist, 0.4) & Dist < quantile(Dist, 0.6) & Att > 0) | Att == 0 ) %>% 
+        #mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
+       #                             ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))), 
       yname = "Total.Hours", 
       treatment = "Tx",
         first_stage = ~ 1 | Zip + Year , 
@@ -2154,16 +2172,20 @@ did2s(
 
 ## Alternative Calculation
 
-mean(df.spill3[df.spill3$Dist < quantile(df.spill3$Dist, probs = c(0.15)),]$Dist)
-mean(df.spill3[df.spill3$Dist > quantile(df.spill3$Dist, probs = c(0.85)),]$Dist)
+dist.close <- mean(df.spill3[df.spill3$Dist < quantile(df.spill3$Dist, probs = c(0.15)),]$Dist)
+dist.far <- mean(df.spill3[df.spill3$Dist > quantile(df.spill3$Dist, probs = c(0.85)),]$Dist)
 
-df.spill3 %>% filter(Att > 0 & Dist < 0.33476343 & Year == Att - 1) %>% summarise(sum(Total.Hours), n())
-df.spill3 %>% filter(Att > 0 & Dist > 157.1606 & Year == Att - 1) %>% summarise(sum(Total.Hours), n())
+df.spill3 %>% filter(Att > 0 & Dist < quantile(df.spill3$Dist, probs = c(0.15)) & Year == Att - 1) %>% summarise(sum(Total.Hours), n())
+df.spill3 %>% filter(Att > 0 & Dist > quantile(df.spill3$Dist, probs = c(0.85)) & Year == Att - 1) %>% summarise(sum(Total.Hours), n())
+
 
 df.spill3 %>% 
   filter(Year == Att - 1) %>% 
-  mutate(EstimatedChange = 6 + -0.039*Dist) %>% 
+  mutate(EstimatedChange =  TEs.strat.close[2,1] + (TEs.strat.far[2,1] - TEs.strat.close[2,1]) / (dist.far - dist.close)*Dist) %>% 
   summarise(sum(abs(EstimatedChange)) / sum(Total.Hours))
+
+
+
 
 ```
 
