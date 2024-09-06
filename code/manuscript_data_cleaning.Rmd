@@ -996,6 +996,7 @@ uds.quality.7 %>%
 cw <- read_excel("/Users/markow/Dropbox/Git/Data/UDS-990 Crosswalk.xlsx")
 
 fins.revenue.expenses <- read.csv("//Users/markow/Dropbox/Git/Data/FQHC_Revenue_vs_Expenses.csv", header = TRUE)
+table(fins.revenue.expenses$X.form_year..)
 names(fins.revenue.expenses) <- gsub("^X\\.", "", names(fins.revenue.expenses))
 names(fins.revenue.expenses) <- gsub("\\.\\.", "", names(fins.revenue.expenses))
 
@@ -1030,6 +1031,8 @@ fins.revenue.expenses <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select
 
 fins.revenue.expenses <- fins.revenue.expenses %>% 
   left_join(assliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) 
+
+
 
 ```
 
