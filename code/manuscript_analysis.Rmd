@@ -2085,20 +2085,6 @@ for (i in 10:19){
 cbind(colnames(df.spill3)[c(30, 10:19)], TEs.strat.far %>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`), TEs.strat.close%>% mutate(Estimate = round(Estimate, 2), `95% CI` = paste(round(Estimate - 1.96 * `Std..Error`, 2), ", ", round(Estimate + 1.96 * `Std..Error`, 2), sep = "")) %>% select(Estimate, `95% CI`, `Pr...t..`))[c(7:11, 2, 1, 3:6),]
 
 
-did2s(
-      data = df.spill3  %>% filter((Dist > quantile(Dist, 0.85) & Att > 0) | Att == 0 ) %>% mutate(Hours = ifelse(Sites == 0, 0, Total.Hours / Sites), SL = log(Sites + 1)) %>% 
-        mutate(Outcome = ifelse(Sites == 0, 0, Schedule / Sites)), 
-        #mutate(Tx = ifelse(Att - 1 == Year, 1, Tx)) %>% 
-       # mutate(Total.Hours = ifelse(Total.Hours > quantile(Total.Hours, 0.975, na.rm = TRUE), quantile(Total.Hours, 0.975, na.rm = TRUE), 
-        #                            ifelse(Total.Hours < quantile(Total.Hours, 0.025, na.rm = TRUE), quantile(Total.Hours, 0.025, na.rm = TRUE), Total.Hours))) , 
-      yname = "Outcome", 
-      treatment = "Tx",
-        first_stage = ~ 1 | Zip + Year , 
-        second_stage = ~ i(Tx, ref = FALSE)  ,
-        cluster_var = "Zip",
-      verbose = FALSE
-    ) 
-
 
 
 ```
