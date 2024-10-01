@@ -1,0 +1,124 @@
+---
+title: "Untitled"
+author: "Justin"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(readxl)
+library(did2s)
+library(tidyverse)
+library(directlabels)
+library(gtsummary)
+library(kableExtra)
+library(ggpubr)
+library(tigris)
+library(usmap)
+```
+
+
+```{r}
+mean.nas<- function(x){ mean(x, na.rm = TRUE)}
+
+options(scipen=999)
+```
+
+
+
+```{r}
+dfc <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+uds.sites.full <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/sites_geocoded.csv") %>%
+  mutate(Access = ifelse(`BHCMIS ID` == "080170" & as.numeric(`Total Weekly Hours Of Operation`) > 40000, 4, Access))
+clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
+  #filter(Year >= included.years[1]) %>%
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>%
+  arrange(desc(Clinics))
+
+ uds.sites.full %>%
+   filter(is.na(Zip))
+
+
+```
+
+
+
+# Build Variables
+
+## Z
+
+```{r}
+
+
+clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
+  #filter(Year >= included.years[1]) %>% 
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>%
+  arrange(desc(Clinics))
+
+
+# Identify clinics in competitive zip codes
+clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+  filter(Year >= included.years[1]) %>%
+  select(`BHCMIS ID`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>% 
+  group_by(`BHCMIS ID`, Year) %>% 
+  summarise(Clinics = max(Clinics)) %>% 
+  pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
+  #filter(`2011` == 1 & `2012` == 1 ) %>%  #  & `2012` == 1 & `2013` == 1 & `2014` == 1 & `2015` == 1 & `2016` == 1) %>%   
+  #filter(`2010` == 1 & `2011` == 1 & `2012` == 1) %>%  
+  #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
+  #filter(is.na(NewClinicID)) %>%
+  select(`BHCMIS ID`:`2021`) %>% 
+  pivot_longer(cols = c(`2010`:`2021`)) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  #filter(min(value) == 1 ) %>% 
+  #filter(max(value) == last(value)) %>% 
+  mutate(Tx = ifelse(value > 1, 1, 0)) 
+
+
+# Classify clinics by introduction of competition
+comp.initial <- clinics.comp %>%  #left_join(clinics.comp %>% mutate(Year = as.numeric(name)), uds.zip.totals, by = c("BHCMIS ID", "name" = "Reporting Year")) %>% 
+  mutate(Year = as.numeric(name)) %>% 
+  left_join(uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+              filter(Year >= included.years[1]) %>%
+  group_by(`BHCMIS ID`, Year) %>% 
+  summarise(Sites = n()), by = c("BHCMIS ID","Year")) %>% 
+  ungroup() %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att = min(ifelse(Tx == 0, 2, 1)*Year, na.rm = TRUE) ) %>% 
+  group_by(`BHCMIS ID`) %>% 
+  mutate(Att = ifelse(Att < max(included.treat)+1, Att, 0)) %>% 
+  ungroup() %>% 
+  mutate(ID = as.numeric(factor(`BHCMIS ID`)))
+
+# Expandors vs Expandees
+comp.initial <- comp.initial %>% 
+  left_join(
+      left_join(comp.initial %>% select(`BHCMIS ID`, Att) %>% unique(), uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+                  filter(Year >= included.years[1]) %>%
+        select(`BHCMIS ID`, Zip, Year) %>% 
+        group_by(`BHCMIS ID`, Zip) %>% 
+        summarise(YearFirstInZip = min(Year)) %>% 
+        filter(YearFirstInZip %notin% min(included.years)) %>% 
+        select(`BHCMIS ID`, YearFirstInZip) %>% 
+        unique(), by = c("BHCMIS ID")) %>% #filter(`BHCMIS ID` == "H80CS00101") %>% 
+        mutate(Expandor = ifelse(is.na(YearFirstInZip) | Att != YearFirstInZip, 0, 1)) %>%  #  is.na(YearFirstInZip) | Att != YearFirstInZip
+        group_by(`BHCMIS ID`) %>% summarise(Expandor = max(Expandor)), by = c("BHCMIS ID")) 
+
+
+dfc <- comp.initial %>% filter(Expandor == 0) %>% 
+  left_join(df.comp, by = c("BHCMIS ID" = "BHCMISID", "Year"))
+
+
+table(table(dfc$`BHCMIS ID`))
+```
+
