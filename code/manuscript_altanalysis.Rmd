@@ -21,6 +21,10 @@ library(kableExtra)
 library(ggpubr)
 library(tigris)
 library(usmap)
+library(ivreg)
+library(fixest)
+library(sandwich)
+library(lmtest)
 ```
 
 
@@ -52,7 +56,96 @@ clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
 
 # Build Variables
 
-## Z
+## Z: Competitive Shocks and Y: Outcomes
+
+
+
+```{r}
+
+
+## Broader definitions 5 / 7 quality measures significant improvements overall
+# included.years <- 2009:2021
+# included.treat <- 2013:2021
+
+## Original good filters
+# included.years <- 2009:2019
+# included.treat <- 2013:2019
+
+included.years <- 2010:2023
+included.treat <- 2013:2023
+
+
+
+df.comp <- uds.covariates %>% 
+  select(Year:BHCMISID, Total:Pct.COM) %>% 
+  select(BHCMISID, Year, Total:Pct.COM) %>% 
+  arrange(BHCMISID, Year) %>% 
+  left_join(uds.6a, by = c("BHCMISID","Year" = "YEAR")) %>% 
+  left_join(uds.quality.6b %>% select(Year, BHCMISID, imm.rate:adultbmi.denom), by = c("BHCMISID","Year")) %>% 
+  left_join(uds.quality.7 %>% 
+  filter(Race == " Total" | is.na(Race)) %>% 
+  group_by(Year, BHCMISID) %>% 
+  summarise(htn.rate = sum(htn.rate * htn.total) / sum(htn.total), 
+            htn.total = sum(htn.total), 
+            dm.rate = sum(dm.rate * dm.total) / sum(dm.total), 
+            dm.total = sum(dm.total)) %>% 
+  arrange(BHCMISID, Year), by = c("BHCMISID","Year")) %>% 
+    left_join(fins.revenue.expenses, by = c("BHCMISID" = "BHCMIS.ID", "Year" = "form_year")) %>% 
+
+  mutate(ID = as.numeric(as.factor(BHCMISID))) %>% 
+  arrange(BHCMISID) 
+
+df.comp <- df.comp %>% 
+  left_join(df.comp %>% 
+  group_by(BHCMISID) %>% 
+  summarise(counts = n()) %>% filter(counts == length(included.years)), by = c("BHCMISID")) %>% 
+  group_by(BHCMISID) %>% 
+  mutate(closed = ifelse(is.na(counts) & Year == max(Year), 1, 0)) #%>%  filter(APM %in% c('Yes','No'))
+
+#df.comp$year.rel <- relevel(as.factor(df.comp$year.rel), ref = "-1") 
+
+## Filter for balanced panel, remove closures and late openings
+df.comp <- df.comp %>%
+  left_join(df.comp %>% summarise(Counts = n(), MinYear = min(Year)), by = c("BHCMISID")) #%>%  filter(Counts == length(included.years)) #  filter(Counts < 13 & MinYear == 2009)    filter(Counts == length(included.years))
+
+## Remove some weird shit in CT
+df.comp <- df.comp %>% 
+  filter(BHCMISID != "01E00010") %>% 
+                mutate(HIV.prev = T6A_L1AND2_CB / Total * 100, 
+         HIV.care = T6A_L1AND2_CA / T6A_L1AND2_CB,
+         
+         HepC.prev = T6A_L4B_CB / Total * 100,
+         HepC.care = T6A_L4B_CA / T6A_L4B_CB,
+
+         Asthma.prev = T6A_L5_CB / Total * 100,
+         Asthma.care = T6A_L5_CA / T6A_L5_CB,
+
+         # AbnormalPap.prev = T6A_L8_CB / Total * 100,
+         # AbnormalPap.care = T6A_L8_CA / T6A_L8_CB,
+         #
+         # ImmunizationsGiven.prev = T6A_L24_CB / Total * 100,
+         # ImmunizationsGiven.care = T6A_L24_CA / T6A_L24_CB,
+         
+         HeartDisease.prev = T6A_L10_CB / Total * 100, 
+         HeartDisease.care = T6A_L10_CA / T6A_L10_CB,
+         
+         # OverweightOrObesity.prev = T6A_L14A_CB / Total * 100, 
+         # OverweightOrObesity.care = T6A_L14A_CA / T6A_L14A_CB, 
+         
+         Depression.prev = T6A_L19A_CB / Total * 100, 
+         Depression.care = T6A_L19A_CA / T6A_L19A_CB, 
+         
+         Diabetes.prev = T6A_L9_CB / Total * 100, 
+         Diabetes.care = T6A_L9_CA / T6A_L9_CB, 
+         
+         Hypertension.prev = T6A_L11_CB / Total * 100, 
+         Hypertension.care = T6A_L11_CA / T6A_L11_CB) %>%  #%>%  filter(STATE != 'CT')
+select(BHCMISID:Year, Total:Pct.COM, HIV.prev:Hypertension.care , imm.rate:MinYear)
+
+
+
+```
+
 
 ```{r}
 
@@ -119,6 +212,123 @@ dfc <- comp.initial %>% filter(Expandor == 0) %>%
   left_join(df.comp, by = c("BHCMIS ID" = "BHCMISID", "Year"))
 
 
+dfc <- dfc %>% 
+  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate + cad.rate + asthma.rate + ivd.rate ) / 9 * 100, 
+         Qcomp.w = (dm.rate * dm.total + htn.rate * htn.total + crc.rate * crc.denom + pap.rate * pap.denom + childbmi.rate * childbmi.denom + adultbmi.rate * adultbmi.denom ) / 
+           ( dm.total +  htn.total +  crc.denom +  pap.denom +  childbmi.denom +  adultbmi.denom ) * 100, 
+               CostPerPat = ngla_expense / Total, 
+               months_of_cash = as.numeric(months_of_cash),
+               ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
+               quick_ratio = as.numeric(quick_ratio),
+               Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_net_gain_loss / Assets, #Assets, 
+               Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities, 
+            Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
+            LiabPctAssets = Liabilities / Assets, 
+            Eff = ngla_prog_serv_revenue / Assets, 
+            LiabPctRev = ngla_prog_serv_revenue / ngla_expense) 
+
+dfc <- dfc %>% 
+  mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
+         Profitability = ifelse(is.infinite(Profitability), NA, Profitability), 
+         Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency), 
+         NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
+         #Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
+         Altman = 0.18 * quick_ratio + 0.3 * Profitability + 0.81 * Efficiency + 0.14 * NetWorth) %>% 
+  mutate(Att.random = ifelse(Att > 0, Att, NA), 
+         Distress = ifelse(Altman < 2.6, 1, 0))
+
+
 table(table(dfc$`BHCMIS ID`))
 ```
+
+## D: HHI, and Bring them Together
+
+```{r}
+
+df.zip <- uds.zip %>% 
+  inner_join(clinics.in.zips, by = c("ZipCode" = "Zip","ReportingYear" = "Year")) %>% 
+  select(BHCMISID, GrantNumber, ReportingYear, ZipCode, NumberofPatients) 
+
+df.zip.totals <- df.zip %>% 
+  group_by( ReportingYear, ZipCode) %>% 
+  summarise(Totals = sum(NumberofPatients))
+
+
+df.zip <- df.zip %>% 
+  left_join(df.zip.totals, by = c("ZipCode","ReportingYear")) %>% 
+  group_by(BHCMISID, GrantNumber, ReportingYear) %>% 
+  summarise(MS_num = sum(NumberofPatients, na.rm = TRUE), 
+            MS_denom = sum(Totals, na.rm = TRUE)) %>% 
+  mutate(MS = 100 - (MS_num / MS_denom * 100))
+
+df.mt <- dfc %>% 
+  left_join(df.zip, by = c("BHCMIS ID" = "BHCMISID", "Year" = "ReportingYear")) %>% 
+  mutate(logPatsPerStaff = ifelse(is.infinite(log(Total / Staff)), NA, log(Total / Staff))) %>% 
+  mutate(Complexity = (HIV.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev) / 5, 
+         Intensity = (HIV.care + HeartDisease.care + Depression.care + Diabetes.care + Hypertension.care) / 5, 
+         Intensity.w = (HIV.care * HIV.prev + HepC.care * HepC.prev + Asthma.care * Asthma.prev + HeartDisease.care * HeartDisease.prev + Depression.care * Depression.prev + Diabetes.care * Diabetes.prev + Hypertension.care * Hypertension.prev) / 
+                  (HIV.prev+ HepC.prev + Asthma.prev + HeartDisease.prev + Depression.prev + Diabetes.prev + Hypertension.prev)) %>% 
+  mutate(dm.rate = dm.rate * 100, 
+         htn.rate = htn.rate * 100, 
+         pap.rate = pap.rate * 100, 
+         crc.rate = crc.rate * 100, 
+         childbmi.rate = childbmi.rate * 100, 
+         adultbmi.rate = adultbmi.rate * 100, 
+         asthma.rate = asthma.rate * 100, 
+         cad.rate = cad.rate * 100, 
+         ivd.rate = ivd.rate * 100)
+```
+
+
+
+
+
+# Analysis
+
+## Model
+
+```{r}
+
+
+df.temptemp <- df.mt %>% 
+  rename(ID = ID.x) %>% 
+  mutate(Closed = ifelse(lead(is.na(Sites)), 1, 0)) %>% 
+  select(value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Complexity, Intensity, Pct.None:Pct.COM, CostPerPat, Altman) %>% 
+  unique() %>% 
+  filter(Year >= 2012) 
+  
+coeffs <- c(0,0,0,0)
+
+for (k in 1:(ncol(df.temptemp)-13)){
+
+  df.temptemptemp <- df.temptemp
+  colnames(df.temptemptemp)[(13+k)] <- "Outcome"
+  model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless  | I(MS/10) ~ value + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemptemp)
+  
+  coeffs <- rbind(coeffs, model$coeftable[2,])
+  
+}
+data.frame(cbind(colnames(df.temptemp)[14:ncol(df.temptemp)], (coeffs[-1,])))
+
+
+
+
+
+```
+
+
+```{r}
+df.mt %>% 
+  filter(Year >= 2012) %>% 
+  mutate(value = ifelse(value > 6, 6, value)) %>% 
+  group_by(value) %>% 
+  summarise(n(), mean(MS, na.rm = TRUE), mean(Complexity, na.rm = TRUE))
+```
+
+
+
+
+
 
