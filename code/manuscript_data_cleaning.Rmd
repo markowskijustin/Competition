@@ -1188,15 +1188,17 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   summarise(Clinics = max(Clinics)) %>% 
   pivot_wider(id_cols = `BHCMIS ID`, names_from = Year, values_from = Clinics) %>% 
   #filter(`2011` == 1 & `2012` == 1 ) %>%  #  & `2012` == 1 & `2013` == 1 & `2014` == 1 & `2015` == 1 & `2016` == 1) %>%   
-  filter(`2014` == 1 & `2015` == 1) %>%  
+  #filter(`2014` == 1 & `2015` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
   select(`BHCMIS ID`:`2023`) %>% 
-  pivot_longer(cols = c(`2014`:`2023`)) %>% 
+  pivot_longer(cols = c(`2010`:`2023`)) %>% 
   group_by(`BHCMIS ID`) %>% 
   filter(min(value) == 1 ) %>% 
   #filter(max(value) == last(value)) %>% 
   mutate(Tx = ifelse(value > 1, 1, 0)) 
+
+
 
 
 # Classify clinics by introduction of competition
@@ -1264,7 +1266,8 @@ dfc <- dfc %>%
   mutate(Att.random = ifelse(Att > 0, Att, NA), 
          Distress = ifelse(Altman < 2.6, 1, 0))
 
-vec.atts <- rep(included.treat, (table(comp.initial$Att) / 12)[-1])
+#vec.atts <- rep(included.treat, (table(comp.initial$Att) / 15)[-1])
+vec.atts <- included.treat
 
 set.seed(123)
 dfc <- rbind(dfc %>% filter(Att > 0), dfc %>% 

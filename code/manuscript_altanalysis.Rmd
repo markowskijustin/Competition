@@ -38,8 +38,8 @@ options(scipen=999)
 
 ```{r}
 dfc <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
-uds.sites.full <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/sites_geocoded.csv") %>%
-  mutate(Access = ifelse(`BHCMIS ID` == "080170" & as.numeric(`Total Weekly Hours Of Operation`) > 40000, 4, Access))
+#uds.sites.full <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/sites_geocoded.csv") %>%
+#  mutate(Access = ifelse(`BHCMIS ID` == "080170" & as.numeric(`Total Weekly Hours Of Operation`) > 40000, 4, Access))
 clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   #filter(Year >= included.years[1]) %>%
   group_by(Zip, Year) %>%
@@ -56,10 +56,9 @@ clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
 
 # Build Variables
 
-## Z: Competitive Shocks and Y: Outcomes
 
 
-
+## Build List of ALL CHCs, star constructing variables
 ```{r}
 
 
@@ -147,6 +146,10 @@ select(BHCMISID:Year, Total:Pct.COM, HIV.prev:Hypertension.care , imm.rate:MinYe
 ```
 
 
+
+
+## Z: Competitive Shocks and Y: Outcomes
+
 ```{r}
 
 
@@ -170,8 +173,8 @@ clinics.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   #filter(`2010` == 1 & `2011` == 1 & `2012` == 1) %>%  
   #left_join(chc.term, by = c("BHCMIS ID" = "ClinicID")) %>%
   #filter(is.na(NewClinicID)) %>%
-  select(`BHCMIS ID`:`2021`) %>% 
-  pivot_longer(cols = c(`2010`:`2021`)) %>% 
+  select(`BHCMIS ID`:`2023`) %>% 
+  pivot_longer(cols = c(`2010`:`2023`)) %>% 
   group_by(`BHCMIS ID`) %>% 
   #filter(min(value) == 1 ) %>% 
   #filter(max(value) == last(value)) %>% 
@@ -213,7 +216,7 @@ dfc <- comp.initial %>% filter(Expandor == 0) %>%
 
 
 dfc <- dfc %>% 
-  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate + cad.rate + asthma.rate + ivd.rate ) / 9 * 100, 
+  mutate(Qcomp = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100, 
          Qcomp.w = (dm.rate * dm.total + htn.rate * htn.total + crc.rate * crc.denom + pap.rate * pap.denom + childbmi.rate * childbmi.denom + adultbmi.rate * adultbmi.denom ) / 
            ( dm.total +  htn.total +  crc.denom +  pap.denom +  childbmi.denom +  adultbmi.denom ) * 100, 
                CostPerPat = ngla_expense / Total, 
@@ -241,6 +244,10 @@ dfc <- dfc %>%
 
 
 table(table(dfc$`BHCMIS ID`))
+
+
+
+dfc %>% filter(ID.x == "90")
 ```
 
 ## D: HHI, and Bring them Together
@@ -279,6 +286,7 @@ df.mt <- dfc %>%
          asthma.rate = asthma.rate * 100, 
          cad.rate = cad.rate * 100, 
          ivd.rate = ivd.rate * 100)
+
 ```
 
 
@@ -295,22 +303,29 @@ df.mt <- dfc %>%
 df.temptemp <- df.mt %>% 
   rename(ID = ID.x) %>% 
   mutate(Closed = ifelse(lead(is.na(Sites)), 1, 0)) %>% 
-  select(value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Complexity, Intensity, Pct.None:Pct.COM, CostPerPat, Altman) %>% 
-  unique() %>% 
-  filter(Year >= 2012) 
+  select(value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Complexity, Intensity, Pct.None:Pct.COM, CostPerPat, Altman, Staff) %>% 
+  unique() 
+
+df.temptemp <- df.temptemp %>% 
+  group_by(ID) %>% 
+  mutate(value_min = min(value, na.rm = TRUE), value_max = max(value, na.rm = TRUE), value_last = last(value, na_rm = TRUE), value_first = first(value, na_rm = TRUE)) %>% 
+  mutate(Tx = value - value_min) %>% 
+  filter(value_min == value_max | value_last > value_first)
+
+
   
 coeffs <- c(0,0,0,0)
 
-for (k in 1:(ncol(df.temptemp)-13)){
+for (k in 1:10){
 
   df.temptemptemp <- df.temptemp
   colnames(df.temptemptemp)[(13+k)] <- "Outcome"
   model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless  | I(MS/10) ~ value + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemptemp)
-  
+
   coeffs <- rbind(coeffs, model$coeftable[2,])
-  
+
 }
-data.frame(cbind(colnames(df.temptemp)[14:ncol(df.temptemp)], (coeffs[-1,])))
+data.frame(cbind(colnames(df.temptemp)[14:23], (coeffs[-1,])))
 
 
 
@@ -319,13 +334,24 @@ data.frame(cbind(colnames(df.temptemp)[14:ncol(df.temptemp)], (coeffs[-1,])))
 ```
 
 
+
+## BY Hand
 ```{r}
-df.mt %>% 
-  filter(Year >= 2012) %>% 
-  mutate(value = ifelse(value > 6, 6, value)) %>% 
-  group_by(value) %>% 
-  summarise(n(), mean(MS, na.rm = TRUE), mean(Complexity, na.rm = TRUE))
+
+
+df.temptemptemp <- df.temptemp %>% select(Qcomp, MS, value, Year, ID, Pct.NHA:Pct.COM) %>% ungroup() %>% filter(complete.cases(.))
+
+reduced <- lm(data = df.temptemptemp, Qcomp ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
+firststage <- lm(data = df.temptemptemp, I(MS/10) ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
+
+
+model <- lm(data = df.temptemptemp, Qcomp ~ firststage$fitted.values + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless)
+summary(model)
+
 ```
+
+
+
 
 
 
