@@ -37,7 +37,7 @@ options(scipen=999)
 
 
 ```{r}
-dfc <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
+#dfc <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/analyticalfile.csv")
 #uds.sites.full <- read_csv("/Users/markow/Dropbox/Git/Competition/data_processed/sites_geocoded.csv") %>%
 #  mutate(Access = ifelse(`BHCMIS ID` == "080170" & as.numeric(`Total Weekly Hours Of Operation`) > 40000, 4, Access))
 clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
@@ -224,11 +224,11 @@ dfc <- dfc %>%
                ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
                quick_ratio = as.numeric(quick_ratio),
                Liquidity = (Assets - Liabilities) / Assets,
-               Profitability = ngla_net_gain_loss / Assets, #Assets, 
+               Profitability = ngla_net_gain_loss / ngla_expense * 100, #Assets, 
                Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
                NetWorth = (Assets - Liabilities) / Liabilities, 
             Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
-            LiabPctAssets = Liabilities / Assets, 
+            LiabPctAssets = Liabilities / Assets * 100, 
             Eff = ngla_prog_serv_revenue / Assets, 
             LiabPctRev = ngla_prog_serv_revenue / ngla_expense) 
 
@@ -250,6 +250,10 @@ table(table(dfc$`BHCMIS ID`))
 dfc %>% filter(ID.x == "90")
 ```
 
+
+
+
+
 ## D: HHI, and Bring them Together
 
 ```{r}
@@ -262,13 +266,30 @@ df.zip.totals <- df.zip %>%
   group_by( ReportingYear, ZipCode) %>% 
   summarise(Totals = sum(NumberofPatients))
 
+df.zip.HHI <- df.zip %>% 
+  group_by(BHCMISID, ReportingYear, ZipCode) %>% 
+  summarise(ZipTotal = sum(NumberofPatients)) %>% 
+  left_join(df.zip.totals, by = c("ReportingYear","ZipCode")) %>% 
+  mutate(MS = ZipTotal / Totals * 100) %>% 
+  ungroup() %>% 
+  arrange(ZipCode, ReportingYear) %>% 
+  group_by(ZipCode, ReportingYear) %>% 
+  mutate(ZipHHI = sum(MS ^2)) %>% 
+  group_by(BHCMISID, ReportingYear) %>% 
+  mutate(ClinicTotal = sum(ZipTotal), 
+         ClinicHHI = sum(ZipHHI * ZipTotal / ClinicTotal)) %>% 
+  arrange(BHCMISID, ReportingYear, ZipCode)
+  
+
+
 
 df.zip <- df.zip %>% 
   left_join(df.zip.totals, by = c("ZipCode","ReportingYear")) %>% 
   group_by(BHCMISID, GrantNumber, ReportingYear) %>% 
   summarise(MS_num = sum(NumberofPatients, na.rm = TRUE), 
             MS_denom = sum(Totals, na.rm = TRUE)) %>% 
-  mutate(MS = 100 - (MS_num / MS_denom * 100))
+  mutate(MS = 100 - (MS_num / MS_denom * 100)) %>% 
+  left_join(df.zip.HHI %>% select(BHCMISID, ReportingYear, ClinicHHI) %>% unique(), by = c("BHCMISID","ReportingYear"))
 
 df.mt <- dfc %>% 
   left_join(df.zip, by = c("BHCMIS ID" = "BHCMISID", "Year" = "ReportingYear")) %>% 
@@ -292,7 +313,6 @@ df.mt <- dfc %>%
 
 
 
-
 # Analysis
 
 ## Model
@@ -303,31 +323,88 @@ df.mt <- dfc %>%
 df.temptemp <- df.mt %>% 
   rename(ID = ID.x) %>% 
   mutate(Closed = ifelse(lead(is.na(Sites)), 1, 0)) %>% 
-  select(value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Complexity, Intensity, Pct.None:Pct.COM, CostPerPat, Altman, Staff) %>% 
+  select(ClinicHHI, Att, `BHCMIS ID`, value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Total, Altman, 
+         htn.rate, dm.rate, pap.rate, crc.rate, childbmi.rate, adultbmi.rate, Complexity, Intensity, Pct.MCD, Pct.MCR, Pct.COM, Pct.None, CostPerPat, ngla_revenue, ngla_expense, Profitability, LiabPctAssets, Staff) %>% 
   unique() 
+
+## htn.total, dm.total, pap.denom, crc.denom, childbmi.denom, adultbmi.denom
 
 df.temptemp <- df.temptemp %>% 
   group_by(ID) %>% 
   mutate(value_min = min(value, na.rm = TRUE), value_max = max(value, na.rm = TRUE), value_last = last(value, na_rm = TRUE), value_first = first(value, na_rm = TRUE)) %>% 
   mutate(Tx = value - value_min) %>% 
-  filter(value_min == value_max | value_last > value_first)
+
+  filter(value_min == value_max | value_last > value_first) %>% 
+  mutate(value = ifelse(value >= 6, 6, value)) 
+
+# %>% 
+#   group_by(ID) %>% 
+#   mutate(Strata = min(Profitability, na.rm = TRUE)) %>% 
+#   filter(Strata < 0)
 
 
-  
 coeffs <- c(0,0,0,0)
 
-for (k in 1:10){
+for (k in 1:21){
 
-  df.temptemptemp <- df.temptemp
-  colnames(df.temptemptemp)[(13+k)] <- "Outcome"
-  model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless  | I(MS/10) ~ value + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemptemp)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless   | I((10000 - ClinicHHI)/1000) ~ Tx + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemptemp)
 
   coeffs <- rbind(coeffs, model$coeftable[2,])
 
 }
-data.frame(cbind(colnames(df.temptemp)[14:23], (coeffs[-1,])))
 
 
+
+core.iv.estimates <- data.frame(cbind(colnames(df.temptemp)[17:37], (coeffs[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`)
+
+core.iv.estimates <- core.iv.estimates
+rownames(core.iv.estimates) <- NULL
+
+core.iv.estimates %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Estimate","95% CI")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Overall Impacts" = 3, "Quality of Care" = 6, "Patient Complexity" = 2, "Payer Mix" = 4, "Finances" = 6)) %>% 
+  add_header_above(c("IV-Estimated LATE Effects of Competitive Shocks on Incumbent Clinics" = 3))
+
+
+
+```
+
+
+## First Stage DID Estimates
+
+```{r}
+ did2s(
+      data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx))  , 
+      yname = "ClinicHHI", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+```
+
+
+## First Stage DID Event Study
+```{r}
+
+
+ event_study(data = df.temptemp ,
+  yname = "ClinicHHI", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
+  filter(abs(term) <= 5) %>%
+  #filter(estimator == "Gardner (2021)") %>%
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("FirstStage: ") + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
 
 
 
@@ -339,16 +416,255 @@ data.frame(cbind(colnames(df.temptemp)[14:23], (coeffs[-1,])))
 ```{r}
 
 
-df.temptemptemp <- df.temptemp %>% select(Qcomp, MS, value, Year, ID, Pct.NHA:Pct.COM) %>% ungroup() %>% filter(complete.cases(.))
+df.temptemptemp <- df.temptemp %>% select(ClinicHHI, Qcomp, MS, value, Year, ID, Pct.NHA:Pct.COM) %>% ungroup() %>% filter(complete.cases(.))
 
 reduced <- lm(data = df.temptemptemp, Qcomp ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
-firststage <- lm(data = df.temptemptemp, I(MS/10) ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
+firststage <- lm(data = df.temptemptemp, I((10000 - ClinicHHI)/1000) ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
 
 
 model <- lm(data = df.temptemptemp, Qcomp ~ firststage$fitted.values + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless)
-summary(model)
+
+m1coeffs_cl <- coeftest(model, vcov = vcovCL, cluster = ~ID)
+m1coeffs_cl
 
 ```
+
+
+
+
+
+## Why are the signs funky? 
+We are likely picking up shifting trends in the level differences across values. 
+
+```{r}
+df.temptemp %>% #left_join(df.temptemp %>% filter(Tx == 1) %>% summarise(Att = min(Year)), by = c("ID")) %>% 
+               mutate(Att = ifelse(is.na(Att), 0, Att)) %>% 
+  mutate(value = ifelse(value >= 6, 6, value)) %>% 
+  group_by(value, Year) %>% 
+  summarise(MS = mean(MS, na.rm = TRUE)) %>% 
+  ggplot(aes(x = Year, y = MS, group = value, color = as.factor(value))) + geom_point() + geom_line()
+```
+
+
+
+
+
+## Balance between treated and controls
+```{r}
+
+df.temptemp %>% 
+  filter(Year == 2012) %>% 
+  mutate(Treat = ifelse(Att > 0, "Treated", "Control")) %>% 
+  select(Treat, Total, Pct.NHA:Staff) %>% 
+  #filter(!complete.cases(.)) %>% 
+  tbl_summary(by = Treat, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"),
+missing = "no", digits = list(everything() ~ c(2))) %>% 
+  add_p(pvalue_fun = function(x) style_pvalue(x, digits = 3)) 
+
+```
+
+
+
+##  Trends over time, figure 1
+
+```{r}
+## Plot
+p <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+  select(`BHCMIS ID`, Zip, Year) %>% 
+  unique() %>% 
+  left_join(clinics.in.zips, by = c("Zip", "Year")) %>%
+  group_by(`BHCMIS ID`, Year) %>%
+  summarise(Clinics = max(Clinics, na.rm = TRUE)) %>%
+  group_by(Year, Clinics) %>% 
+  summarise(Count = n()) %>% 
+  mutate(CompetitorsInArea = factor(ifelse( Clinics < 4, Clinics - 1, "3+"))) %>% 
+  group_by(Year, CompetitorsInArea) %>% 
+  summarise(Count = sum(Count)) %>% 
+  filter(CompetitorsInArea != "-Inf")
+
+
+plot0 <- p %>% 
+  arrange(CompetitorsInArea) %>% 
+  ggplot(aes(x = Year, y = Count, group = CompetitorsInArea, color = CompetitorsInArea)) + ylab("FQHCs") + 
+  geom_point(size = 1.1) + geom_line(size = 1.1) + theme_tufte_revised() + ggtitle("FQHCs by Number of Colocated FQHCs") + 
+  geom_dl(label=c(rep("0 Competitors", length(unique(p$Year))), rep("1 Competitor", length(unique(p$Year))), rep("2 Competitors", length(unique(p$Year))), rep("3+ Competitors", length(unique(p$Year)))), 
+          method = list("last.points", hjust = 1, vjust = c(2, 2.5, 2.5, -1), cex = 1.5), inherit.aes=T ) + 
+  guides(colour = "none") +theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12,face="bold"))
+
+plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>% 
+            group_by(Zip, Year) %>% 
+  summarise(Counts = n()) %>% 
+  #summarise(Counts = n_distinct(`Grant Number`)) %>% 
+  ungroup() %>% 
+  group_by(Year, Counts) %>% 
+  summarise(Zips = n()) %>% 
+  mutate(Counts.f = as.factor(ifelse(Counts >= 2, "2+", Counts))) %>% 
+  group_by(Counts.f, Year) %>% 
+  summarise(Zips = sum(Zips)) %>% 
+  #filter(Year >= 2010) %>% 
+  ggplot(aes(x = Year, y = Zips, group = Counts.f, color = Counts.f)) + 
+  geom_point(size = 1.1) + geom_line(size = 1.1) + theme_tufte_revised() + ggtitle("Zip Codes by Number of FQHC Sites") + 
+  geom_dl(label=c(rep("1 Site", length(unique(p$Year))), rep("2+ Sites", length(unique(p$Year)))), method = list("last.points", hjust = 1, vjust = -1, cex = 1.5), inherit.aes=T ) + 
+  guides(colour = "none") + ylim(0, 4000) +theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12,face="bold"))
+
+
+p.desc <- ggarrange(plot1, plot0, ncol = 1) 
+
+p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
+
+#ggsave(filename = "Figure1.png", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Figures", plot = p.desc, width = 8, height = 11)
+
+
+
+# p.desc <- ggarrange(plot1, plot0, ncol = 2) 
+# 
+# p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
+
+#ggsave(filename = "Picture1h.png", path = "/Users/jhm65/Dropbox/Writing/JMP_figures", plot = p.desc, width = 16, height = 9)
+
+
+p.desc
+
+
+
+```
+
+
+
+
+
+
+## Changes in geographic distribution of resources by Distance to competitive zip
+
+```{r}
+
+## Treatment vs control, only in zip code of interest
+df.z <- left_join(df.temptemp, 
+                  #uds.zip %>% mutate(Zip = `ZipCode`) %>% select(`BHCMISID`, Zip) %>% unique() , by = c("BHCMIS ID" = "BHCMISID")) %>%
+                  uds.sites.full[!is.na(uds.sites.full$Zip),] %>% filter(Year %in% c(2010:2023)) %>% select(`BHCMIS ID`, Zip) %>% unique() %>% filter(!is.na(Zip)), by = c("BHCMIS ID")) %>%
+  left_join(uds.zip, by = c("BHCMIS ID" = "BHCMISID", "Year" = "ReportingYear", "Zip" = "ZipCode")) %>%
+  
+  ungroup() %>% 
+  ###### MAJOR CHANGE: remove those CHCS wtih missing market share MS from GrantNumber
+ #filter(!is.na(`MS`)) %>% 
+  left_join(clinics.in.zips %>% select(Zip:Clinics), by = c("Zip","Year")) %>%
+  rename(ID.chc = ID) %>% 
+  mutate(Tx.z = ifelse(Clinics == 1 , 0, 
+                ifelse(is.na(Clinics), NA, 1)), # | is.na(Clinics)
+         ID = as.numeric(factor(paste(`BHCMIS ID`, Zip, sep = "-")))) %>%
+  select(`BHCMIS ID`:Year, Att, ID, Zip:Tx.z) %>%
+  arrange(`BHCMIS ID`, Zip, Year) %>% 
+  unique() #%>%  inner_join(df.qual.exp %>% filter(Year == 2015 & Total > 12050) %>% select(`Grant Number`), by = c("Grant Number"))  #& Zips < 3.75 or 4.75
+  # %>%   filter(MarketShare > median(MarketShare, na.rm = TRUE) - 0.25) 
+
+length(unique(df.z$ID))
+
+
+
+df.z <- df.z %>% 
+  left_join(df.z %>%
+            filter(Tx.z == 1) %>%
+            group_by(ID, Zip) %>%
+            summarise(Att.z = min(Year)), by = c("ID", "Zip")) %>%
+  mutate(Att.z = ifelse(is.na(Att.z), 0, Att.z)) #%>%
+# inner_join(df.z %>% filter(!is.na(Clinics)) %>% group_by(ID) %>% summarise(n()) %>% filter(`n()` == length(unique(df.qual.exp$Year))), by = c("ID")) #%>% filter(Att == Att.z)
+
+
+length(unique(df.z$ID))
+
+df.z <- df.z %>% 
+    left_join(uds.sites.full %>% 
+              filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
+              #filter(`Location Setting` %in% c("All Other Clinic Types","School") | is.na(`Location Setting`)) %>% 
+              mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
+                                ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
+                     Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
+                                ifelse(`Operational Schedule` == "Part-Time", 0.5, 0)),
+                     Calendar = ifelse(`Calendar Schedule` == "Year-Round", 1,
+                                ifelse(`Calendar Schedule` == "Seasonal", 0.5, 0))) %>% 
+              group_by(`BHCMIS ID`, Year, Zip) %>% 
+              summarise(Sites = n(), Mean.Hours = mean(Access, na.rm = TRUE), Total.Hours = sum(Access, na.rm = TRUE), 
+                        Perminance = sum(Type.num, na.rm = TRUE), Schedule = sum(Schedule, na.rm = TRUE), Calendar = sum(Calendar, na.rm = TRUE)), by = c("BHCMIS ID","Year", "Zip")) %>% 
+  mutate(Sites = ifelse(is.na(Sites), 0, Sites), 
+         Mean.Hours = ifelse(is.na(Mean.Hours), 0, Mean.Hours), 
+         Total.Hours = ifelse(is.na(Total.Hours), 0, Total.Hours), 
+         Perminance = ifelse(is.na(Perminance), 0, Perminance), 
+         Schedule = ifelse(is.na(Schedule), 0, Schedule), 
+         Calendar = ifelse(is.na(Calendar), 0, Calendar))
+
+df.z <- df.z %>% 
+  left_join(df.zip.totals, by = c("Zip" = "ZipCode","Year" = "ReportingYear")) %>% 
+  mutate(MS = 100 - (NumberofPatients / Totals * 100)) %>% 
+  left_join(df.zip.HHI, by = c("BHCMIS ID" = "BHCMISID","Year" = "ReportingYear","Zip" = "ZipCode"))
+
+df.z
+
+
+```
+
+## Spatial Analysis
+
+```{r}
+
+
+df.z.temp <- df.z %>% mutate(Tx = ifelse(value - 1 > 1, 1, value - 1)) %>% filter(!is.na(Tx)) %>% mutate(DirectlyTreated = ifelse(Att.z > 2010, 1, 0)) %>% 
+        mutate(Pct.MCD = Medicaid / NumberofPatients * 100, 
+               Pct.MCR = Medicare / NumberofPatients * 100, 
+               Pct.COM = Private / NumberofPatients * 100,
+               Pct.None = Uninsured / NumberofPatients * 100 ) %>% 
+  select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year)
+
+ 
+coeffs <- c(0,0,0,0, 0, 0, 0, 0)
+
+for (k in 1:8){
+
+  df.z.temp2 <- df.z.temp
+  colnames(df.z.temp2)[k] <- "Outcome"
+  model <-  did2s(
+      data = df.z.temp2, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ 1 | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE)  + I(Tx * DirectlyTreated),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs <- rbind(coeffs, c(model$coeftable[2,], model$coeftable[1,]))
+
+}
+
+
+zip.estimates <- data.frame(cbind(colnames(df.z.temp)[1:8], (coeffs[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  mutate(Estimate.1 = round(as.numeric(Estimate.1), 2), `95% CI.1` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(`Std..Error.1`), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(`Std..Error.1`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Estimate.1, `95% CI.1`)
+
+zip.estimates <- zip.estimates[c(1, 6, 2:5, 7:8),]
+rownames(zip.estimates) <- NULL
+
+zip.estimates %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Estimate","95% CI","Estimate","95% CI")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Overall Impacts" = 2, "Patient and Payer Mix" = 4, "Access" = 2)) %>% 
+  add_header_above(c(" " = 1, "Directly Competitive" = 2, "Indirectly Competitive" = 2)) %>% 
+  add_header_above(c("DID-Estimated Effects of Competitive Shocks on Zip Codes in Incumbent Clinics' Service Area" = 5))
+
+
+```
+
+
+
+
+
+
+
 
 
 
