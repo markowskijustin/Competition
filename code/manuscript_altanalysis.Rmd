@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(readxl)
 library(did2s)
+library(did)
 library(tidyverse)
 library(directlabels)
 library(gtsummary)
@@ -224,7 +225,7 @@ dfc <- dfc %>%
                ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
                quick_ratio = as.numeric(quick_ratio),
                Liquidity = (Assets - Liabilities) / Assets,
-               Profitability = ngla_net_gain_loss / ngla_expense * 100, #Assets, 
+               Profitability = ngla_revenue / ngla_expense * 100, #Assets, 
                Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
                NetWorth = (Assets - Liabilities) / Liabilities, 
             Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense, 
@@ -323,9 +324,10 @@ df.mt <- dfc %>%
 df.temptemp <- df.mt %>% 
   rename(ID = ID.x) %>% 
   mutate(Closed = ifelse(lead(is.na(Sites)), 1, 0)) %>% 
-  select(ClinicHHI, Att, `BHCMIS ID`, value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Total, Altman, 
-         htn.rate, dm.rate, pap.rate, crc.rate, childbmi.rate, adultbmi.rate, Complexity, Intensity, Pct.MCD, Pct.MCR, Pct.COM, Pct.None, CostPerPat, ngla_revenue, ngla_expense, Profitability, LiabPctAssets, Staff) %>% 
+  select(ClinicHHI, Att, `BHCMIS ID`, value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Total, Altman, logPatsPerStaff, 
+         htn.rate, dm.rate, pap.rate, crc.rate, childbmi.rate, adultbmi.rate, Complexity, Intensity, Pct.MCD, Pct.MCR, Pct.COM, Pct.None, CostPerPat, quick_ratio, months_of_cash, Profitability, LiabPctAssets, Staff, Closed) %>% 
   unique() 
+
 
 ## htn.total, dm.total, pap.denom, crc.denom, childbmi.denom, adultbmi.denom
 
@@ -335,7 +337,7 @@ df.temptemp <- df.temptemp %>%
   mutate(Tx = value - value_min) %>% 
 
   filter(value_min == value_max | value_last > value_first) %>% 
-  mutate(value = ifelse(value >= 6, 6, value)) 
+  mutate(value = ifelse(value >= 6, 6, value)) #%>% filter(Year < 2020)
 
 # %>% 
 #   group_by(ID) %>% 
@@ -345,7 +347,7 @@ df.temptemp <- df.temptemp %>%
 
 coeffs <- c(0,0,0,0)
 
-for (k in 1:21){
+for (k in 1:22){
 
   df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx))
   colnames(df.temptemptemp)[(16+k)] <- "Outcome"
@@ -357,7 +359,7 @@ for (k in 1:21){
 
 
 
-core.iv.estimates <- data.frame(cbind(colnames(df.temptemp)[17:37], (coeffs[-1,]))) %>% 
+core.iv.estimates <- data.frame(cbind(colnames(df.temptemp)[17:38], (coeffs[-1,]))) %>% 
   #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
   mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
   select(V1, Estimate, `95% CI`)
@@ -368,15 +370,18 @@ rownames(core.iv.estimates) <- NULL
 core.iv.estimates %>% 
   kable("html", booktabs = T, col.names = c("Outcome","Estimate","95% CI")) %>% 
   kable_styling(latex_options = c("striped")) %>%
-  pack_rows(index = c("Overall Impacts" = 3, "Quality of Care" = 6, "Patient Complexity" = 2, "Payer Mix" = 4, "Finances" = 6)) %>% 
+  pack_rows(index = c("Overall Impacts" = 4, "Quality of Care" = 6, "Patient Complexity" = 2, "Payer Mix" = 4, "Finances" = 6)) %>% 
   add_header_above(c("IV-Estimated LATE Effects of Competitive Shocks on Incumbent Clinics" = 3))
 
+
+
+feols(I(Closed * 100) ~  Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | I((10000 - ClinicHHI)/1000) ~ Tx + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemp)
 
 
 ```
 
 
-## First Stage DID Estimates
+## First Stage DID Estimates and Event Study
 
 ```{r}
  did2s(
@@ -390,17 +395,12 @@ core.iv.estimates %>%
     )
 
 
-```
-
-
-## First Stage DID Event Study
-```{r}
-
 
  event_study(data = df.temptemp ,
   yname = "ClinicHHI", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
-  filter(abs(term) <= 5) %>%
+  filter(abs(term) <= 6) %>%
   #filter(estimator == "Gardner (2021)") %>%
+  filter(estimator == "Callaway and Sant'Anna (2020)") %>%
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
@@ -415,8 +415,8 @@ core.iv.estimates %>%
 ## BY Hand
 ```{r}
 
-
-df.temptemptemp <- df.temptemp %>% select(ClinicHHI, Qcomp, MS, value, Year, ID, Pct.NHA:Pct.COM) %>% ungroup() %>% filter(complete.cases(.))
+## TWFE First Stage
+df.temptemptemp <- df.temptemp %>% select(ClinicHHI, Qcomp, MS, value, Year, ID, Pct.NHA:Pct.None) %>% ungroup() %>% filter(complete.cases(.))
 
 reduced <- lm(data = df.temptemptemp, Qcomp ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
 firststage <- lm(data = df.temptemptemp, I((10000 - ClinicHHI)/1000) ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
@@ -426,6 +426,23 @@ model <- lm(data = df.temptemptemp, Qcomp ~ firststage$fitted.values + Pct.NHB +
 
 m1coeffs_cl <- coeftest(model, vcov = vcovCL, cluster = ~ID)
 m1coeffs_cl
+
+
+
+# ## Callaway-Sant'Anna First Stage
+# 
+# example_attgt <- att_gt(yname = "ClinicHHI",
+#                         tname = "Year",
+#                         idname = "ID",
+#                         gname = "Att",
+#                         xformla = ~Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless,
+#                         data = df.temptemp, 
+#                         clustervars = "ID"
+#                         )
+# 
+# # summarize the results
+# aggte(example_attgt)
+
 
 ```
 
@@ -441,8 +458,8 @@ df.temptemp %>% #left_join(df.temptemp %>% filter(Tx == 1) %>% summarise(Att = m
                mutate(Att = ifelse(is.na(Att), 0, Att)) %>% 
   mutate(value = ifelse(value >= 6, 6, value)) %>% 
   group_by(value, Year) %>% 
-  summarise(MS = mean(MS, na.rm = TRUE)) %>% 
-  ggplot(aes(x = Year, y = MS, group = value, color = as.factor(value))) + geom_point() + geom_line()
+  summarise(HHI = mean(ClinicHHI, na.rm = TRUE)) %>% 
+  ggplot(aes(x = Year, y = HHI, group = value, color = as.factor(value))) + geom_point() + geom_line()
 ```
 
 
@@ -600,7 +617,6 @@ df.z <- df.z %>%
   mutate(MS = 100 - (NumberofPatients / Totals * 100)) %>% 
   left_join(df.zip.HHI, by = c("BHCMIS ID" = "BHCMISID","Year" = "ReportingYear","Zip" = "ZipCode"))
 
-df.z
 
 
 ```
@@ -611,25 +627,26 @@ df.z
 
 
 df.z.temp <- df.z %>% mutate(Tx = ifelse(value - 1 > 1, 1, value - 1)) %>% filter(!is.na(Tx)) %>% mutate(DirectlyTreated = ifelse(Att.z > 2010, 1, 0)) %>% 
+  filter(!(Att == 0 & DirectlyTreated == 1)) %>% 
         mutate(Pct.MCD = Medicaid / NumberofPatients * 100, 
                Pct.MCR = Medicare / NumberofPatients * 100, 
                Pct.COM = Private / NumberofPatients * 100,
                Pct.None = Uninsured / NumberofPatients * 100 ) %>% 
-  select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year)
+  select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year, Zip, Att) 
 
  
 coeffs <- c(0,0,0,0, 0, 0, 0, 0)
 
 for (k in 1:8){
 
-  df.z.temp2 <- df.z.temp
+  df.z.temp2 <- df.z.temp #%>% filter(Att == 0 | Att > 2010)
   colnames(df.z.temp2)[k] <- "Outcome"
   model <-  did2s(
       data = df.z.temp2, 
       yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ 1 | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE)  + I(Tx * DirectlyTreated),
+        second_stage = ~ i(Tx * (1 - DirectlyTreated), ref = FALSE)  + I(Tx * DirectlyTreated),
         cluster_var = "ID",
       verbose = TRUE
     )
@@ -656,13 +673,63 @@ zip.estimates %>%
   add_header_above(c(" " = 1, "Directly Competitive" = 2, "Indirectly Competitive" = 2)) %>% 
   add_header_above(c("DID-Estimated Effects of Competitive Shocks on Zip Codes in Incumbent Clinics' Service Area" = 5))
 
+## WATCH OUT FOR THE INTERACTION INTERPRETATION
+
+```
+
+
+## Event Study
+
+```{r}
+ event_study(data = df.z.temp %>% filter(Att == 0 | DirectlyTreated == 0),
+  yname = "Total.Hours", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~1) %>%
+  filter(abs(term) <= 6) %>%
+  filter(estimator == "Gardner (2021)") %>%
+  #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
+
+
+
+ event_study(data = df.z.temp %>% filter(Att == 0 | DirectlyTreated == 1),
+  yname = "Total.Hours", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~1) %>%
+  filter(abs(term) <= 6) %>%
+  filter(estimator == "Gardner (2021)") %>%
+  #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
+  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
 
 ```
 
 
 
 
+## Are the closer and farther areas different?
+```{r}
 
+df.z.temp %>% 
+  #select(Zip, Year, DirectlyTreated, Att) %>% 
+  mutate(Status = ifelse(Att == 0, NA, 
+                         ifelse(Att > 0 & DirectlyTreated == 0, "IndirectlyTreated","DirectlyTreated"))) %>% 
+  inner_join(census, by = c("Zip" = "ZipCode", "Year" = "YEAR")) %>% 
+  filter(Year == 2012) %>% 
+  mutate(PctMedicaid = Medicaid / MCD.denom * 100, 
+         PctUninsured = Uninsured / Unins.denom * 100, 
+         PctPoverty = IncomeBelowPoverty / PovertyStatusDet * 100, 
+         PctBlack = Black / TotalPop * 100, 
+         PctHispanic = Hispanic / TotalPop * 100) %>% 
+    select(Status, TotalPop, PctMedicaid:PctHispanic) %>% 
+    tbl_summary(by = Status, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
+  add_p()
+  
+
+
+```
 
 
 
