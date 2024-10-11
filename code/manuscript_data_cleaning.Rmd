@@ -679,7 +679,8 @@ uds.covariates <-  uds.covariates %>%
 
 uds.covariates %>% 
   arrange(BHCMISID, Year)
-
+uds.covariates %>% 
+  filter(Pct.Homeless > 99)
 
 ```
 
@@ -1034,6 +1035,28 @@ fins.revenue.expenses <- fins.revenue.expenses %>%
   left_join(assliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) 
 
 
+
+## Add updated data
+ufins.revenue.expenses <- read.csv("//Users/markow/Dropbox/Git/Data/Updated_FQHC_Revenue_vs_Expenses.csv", header = TRUE)
+table(ufins.revenue.expenses$X.form_year..)
+names(ufins.revenue.expenses) <- gsub("^X\\.", "", names(ufins.revenue.expenses))
+names(ufins.revenue.expenses) <- gsub("\\.\\.", "", names(ufins.revenue.expenses))
+
+ustaffing <- read.csv("/Users/markow/Dropbox/Git/Data/Updated_FQHC_Staffing.csv")
+uassliabs <- read.csv("/Users/markow/Dropbox/Git/Data/Updated_FQHC_Assets_and_Liabilities.csv")
+
+
+ufins <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID) %>% 
+  left_join(cw, by = c("ModernGranteeID" = "Grant Number")) %>% 
+  left_join(ufins.revenue.expenses, by = c("EIN" = "EIN")) %>% 
+  select(ModernGranteeID:EIN, form_year:fringe_rate) %>% 
+  left_join(ustaffing %>% select(EIN:Staff), by = c("EIN","form_year" = "Year")) %>% 
+  left_join(uassliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) 
+
+
+
+
+fins.revenue.expenses <- ufins
 
 ```
 

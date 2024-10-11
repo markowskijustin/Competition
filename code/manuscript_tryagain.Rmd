@@ -1,0 +1,188 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-10-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+# Library
+
+
+
+
+# Another Go
+
+
+```{r}
+year.zip.clinic <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
+  #filter(Year >= included.years[1]) %>%
+  group_by(Zip, Year, `BHCMIS ID`) %>%
+  summarise(Sites = n()) %>%
+  arrange(Zip, Year, `BHCMIS ID`) %>% 
+  arrange(Year) %>% 
+  filter(Year >= 2012) %>% 
+  pivot_wider(id_cols = c(Zip, `BHCMIS ID`), names_from = Year, values_from = Sites) %>% 
+  select(Zip, `BHCMIS ID`, `2012`:`2023`) %>% 
+  pivot_longer(cols = c(`2012`:`2023`)) %>% 
+  mutate(value = ifelse(is.na(value), 0, value))
+
+
+zip.comp <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
+  #filter(Year >= included.years[1]) %>%
+  group_by(Zip, Year) %>%
+  summarise(Clinics = n_distinct(`BHCMIS ID`), Sites = n()) %>% 
+  arrange(Year) %>% 
+  filter(Year >= 2012) %>% 
+  pivot_wider(id_cols = Zip, names_from = Year, values_from = Clinics) %>% 
+  select(Zip, `2012`:`2023`) %>% 
+  pivot_longer(cols = c(`2012`:`2023`)) %>% 
+  mutate(value = ifelse(is.na(value), 0, value))
+
+
+df.master <- zip.comp %>% 
+  inner_join(year.zip.clinic, by = c("Zip","name")) %>% 
+  rename(nClinicsInZipYear = value.x, nSitesByClinicZipYear = value.y, BHCMISID = `BHCMIS ID`) %>% 
+  mutate(Year = as.numeric(name)) %>% 
+  select(Zip, Year, BHCMISID, nClinicsInZipYear, nSitesByClinicZipYear)
+
+
+df.master <- df.master %>% 
+  left_join(df.master %>% 
+  group_by(BHCMISID, Zip) %>% 
+  filter(nSitesByClinicZipYear > 0) %>% 
+  mutate(YearFirstInZip = min(Year), YearLastInZip = max(Year)) %>% 
+    select(Zip, BHCMISID, YearFirstInZip, YearLastInZip) %>% unique(), by = c("Zip","BHCMISID")) %>% 
+  filter(Zip != "00000")
+
+
+
+```
+
+
+## Show Distribution
+```{r}
+
+
+df.master %>% 
+  group_by(YearFirstInZip, YearLastInZip) %>% 
+  summarise(Obs = n()) %>% 
+  pivot_wider(id_cols = YearFirstInZip, names_from = YearLastInZip, values_from = Obs) %>% 
+  as.matrix()
+
+
+
+
+df.master <- df.master %>% 
+  arrange(Zip, Year, BHCMISID) %>% 
+  group_by(Zip, BHCMISID) %>% 
+  mutate(Change = nClinicsInZipYear - lag(nClinicsInZipYear), 
+         ChangeThemselves = nSitesByClinicZipYear - lag(nSitesByClinicZipYear)) %>% 
+  mutate(ShockUp = ifelse(nSitesByClinicZipYear > 0 & Change > 0 & ChangeThemselves == 0, 1, 0), 
+         ShockDown = ifelse(nSitesByClinicZipYear > 0 & Change < 0 & ChangeThemselves == 0, 1, 0))
+  
+  
+
+## Floating, changing boundaries of service area 
+df.countingRivals <- df.master %>% 
+  #filter(nSitesByClinicZipYear > 0) %>% 
+  select(BHCMISID, Year, Zip) %>% 
+  unique() %>% 
+  arrange(BHCMISID, Year, Zip) %>% 
+  left_join(df.master %>% 
+  filter(nSitesByClinicZipYear > 0) %>% 
+  select(BHCMISID, Year, Zip) %>% 
+  unique() %>% 
+  arrange(BHCMISID, Year, Zip), by = c("Zip","Year")) %>% 
+  #filter(BHCMISID.x != BHCMISID.y) %>% 
+  ungroup() %>% 
+  select(BHCMISID.x, Year, BHCMISID.y) %>% 
+  rename(Incumbent = BHCMISID.x, Rival = BHCMISID.y) %>% 
+  unique() %>% 
+  group_by(Incumbent, Year) %>% 
+  summarise(nRivals = n() - 1) %>% 
+  ungroup() %>% 
+  group_by(Incumbent) %>% 
+  mutate(nRivals_min = min(nRivals), nRivals_max = max(nRivals))
+
+
+df.master <- df.master %>% 
+  left_join(df.countingRivals, by = c("BHCMISID" = "Incumbent","Year")) %>% 
+  select(Zip, Year, BHCMISID, nRivals, nRivals_min, nRivals_max, nClinicsInZipYear:ShockDown)
+
+
+# uds.sites.full %>% 
+#   filter(`BHCMIS ID` == "010030")
+# 
+# 
+# df.master %>% 
+#   filter(`BHCMISID` == "010030")
+# 
+# 
+# uds.sites.full %>% 
+#   filter(Zip == "01040")
+
+
+
+```
+
+
+
+
+## Taking it further
+```{r}
+
+df.zip <- df.master %>% 
+  left_join(uds.sites.full %>% 
+              filter(`Location Setting` %in% c("All Other Clinic Types")) %>% 
+              #filter(`Location Setting` %in% c("All Other Clinic Types","School") | is.na(`Location Setting`)) %>% 
+              mutate(Type.num = ifelse(`Location Type` == "Seasonal", 0.33, 
+                                ifelse(`Location Type` == "Mobile Van", 0.66, 1)), 
+                     Schedule = ifelse(`Operational Schedule` == "Full-Time", 1, 
+                                ifelse(`Operational Schedule` == "Part-Time", 0.5, 0)),
+                     Calendar = ifelse(`Calendar Schedule` == "Year-Round", 1,
+                                ifelse(`Calendar Schedule` == "Seasonal", 0.5, 0))) %>% 
+              group_by(`BHCMIS ID`, Year, Zip) %>% 
+              summarise(Sites = n(), Mean.Hours = mean(Access, na.rm = TRUE), Total.Hours = sum(Access, na.rm = TRUE), 
+                        Perminance = sum(Type.num, na.rm = TRUE), Schedule = sum(Schedule, na.rm = TRUE), Calendar = sum(Calendar, na.rm = TRUE)), by = c("BHCMISID" = "BHCMIS ID","Year", "Zip")) %>% 
+  mutate(Sites = ifelse(is.na(Sites), 0, Sites), 
+         Mean.Hours = ifelse(is.na(Mean.Hours), 0, Mean.Hours), 
+         Total.Hours = ifelse(is.na(Total.Hours), 0, Total.Hours), 
+         Perminance = ifelse(is.na(Perminance), 0, Perminance), 
+         Schedule = ifelse(is.na(Schedule), 0, Schedule), 
+         Calendar = ifelse(is.na(Calendar), 0, Calendar))
+
+df.zip %>% 
+  mutate(Tx = nRivals - nRivals_min) %>% 
+  filter(nRivals_max >= nRivals_min) %>% 
+  filter(Zip == "01040")
+
+```
+
+
+## Zip Analysis
+```{r}
+
+
+did2s(
+      data = df.zip %>% 
+  mutate(Tx = nRivals - nRivals_min) %>% 
+  filter(nRivals_max >= nRivals_min) %>% 
+    mutate(Tx = ifelse(Tx > 0, 1, 0)) %>% 
+    filter(Tx >= 0) %>% ungroup() %>% mutate(ID = as.numeric(factor(paste(`BHCMISID`, Zip, sep = "-")))), 
+      yname = "Total.Hours", 
+      treatment = "Tx",
+        first_stage = ~ 1 | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx , ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+```
+

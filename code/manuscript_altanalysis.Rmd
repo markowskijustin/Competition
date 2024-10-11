@@ -251,6 +251,10 @@ table(table(dfc$`BHCMIS ID`))
 dfc %>% filter(ID.x == "90")
 ```
 
+```{r}
+uds.covariates %>% 
+  filter(`BHCMISID` == "010180")
+```
 
 
 
@@ -309,21 +313,18 @@ df.mt <- dfc %>%
          cad.rate = cad.rate * 100, 
          ivd.rate = ivd.rate * 100)
 
+
+
+
 ```
 
-
-
-
-# Analysis
-
-## Model
-
+## More Cleaning
 ```{r}
 
-
 df.temptemp <- df.mt %>% 
-  rename(ID = ID.x) %>% 
-  mutate(Closed = ifelse(lead(is.na(Sites)), 1, 0)) %>% 
+    rename(ID = ID.x) %>% 
+    group_by(ID) %>% 
+  mutate(Closed = ifelse(lead(is.na(Sites)), 100, 0)) %>% 
   select(ClinicHHI, Att, `BHCMIS ID`, value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Total, Altman, logPatsPerStaff, 
          htn.rate, dm.rate, pap.rate, crc.rate, childbmi.rate, adultbmi.rate, Complexity, Intensity, Pct.MCD, Pct.MCR, Pct.COM, Pct.None, CostPerPat, quick_ratio, months_of_cash, Profitability, LiabPctAssets, Staff, Closed) %>% 
   unique() 
@@ -337,7 +338,31 @@ df.temptemp <- df.temptemp %>%
   mutate(Tx = value - value_min) %>% 
 
   filter(value_min == value_max | value_last > value_first) %>% 
-  mutate(value = ifelse(value >= 6, 6, value)) #%>% filter(Year < 2020)
+  mutate(value = ifelse(value >= 6, 6, value)) #%>% group_by(ID) %>% mutate(max_Closures = max(Closed)) %>% filter(max_Closures == 0) 
+
+
+
+
+df.temptemp <- df.temptemp %>% 
+  left_join (df.temptemp %>% 
+  filter(value > value_min) %>% 
+  group_by(ID) %>% 
+  summarise(Att = min(Year)), by = c("ID")) %>% 
+  mutate(Att = ifelse(!is.na(Att.y), Att.y, Att.x)) %>% 
+  select(ClinicHHI, Att, `BHCMIS ID`, value, ID, MS, Year, Pct.NHA:Pct.Homeless, Qcomp, Total, Altman, logPatsPerStaff, 
+         htn.rate, dm.rate, pap.rate, crc.rate, childbmi.rate, adultbmi.rate, Complexity, Intensity, Pct.MCD, Pct.MCR, Pct.COM, Pct.None, CostPerPat, quick_ratio, months_of_cash, Profitability, LiabPctAssets, Staff, Closed:Tx) %>% 
+  unique() 
+
+```
+
+
+# Analysis
+
+## Model
+
+```{r}
+
+
 
 # %>% 
 #   group_by(ID) %>% 
@@ -373,20 +398,25 @@ core.iv.estimates %>%
   pack_rows(index = c("Overall Impacts" = 4, "Quality of Care" = 6, "Patient Complexity" = 2, "Payer Mix" = 4, "Finances" = 6)) %>% 
   add_header_above(c("IV-Estimated LATE Effects of Competitive Shocks on Incumbent Clinics" = 3))
 
+model <- feols(Complexity ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless   | I((10000 - ClinicHHI)/1000) ~ Tx  + factor(Year) + factor(ID), cluster = "ID", data = df.temptemp)
+summary(model)
 
 
-feols(I(Closed * 100) ~  Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | I((10000 - ClinicHHI)/1000) ~ Tx + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemp)
+model <- lm(data = df.temptemp, Pct.None ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless   + Tx + factor(Year) + factor(ID) )
+summary(model)
 
 
 ```
+
+
 
 
 ## First Stage DID Estimates and Event Study
 
 ```{r}
  did2s(
-      data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx))  , 
-      yname = "ClinicHHI", 
+      data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)  )   , 
+      yname = "Complexity", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
@@ -400,7 +430,7 @@ feols(I(Closed * 100) ~  Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWork
   yname = "ClinicHHI", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
   filter(abs(term) <= 6) %>%
   #filter(estimator == "Gardner (2021)") %>%
-  filter(estimator == "Callaway and Sant'Anna (2020)") %>%
+  #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
@@ -409,6 +439,58 @@ feols(I(Closed * 100) ~  Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWork
 
 
 ```
+
+
+
+
+
+
+## Alt DID estimates
+
+```{r}
+
+
+coeffs.did <- c(0,0,0,0)
+
+for (k in 1:22){
+
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  model <-  did2s(
+      data = df.temptemptemp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs.did <- rbind(coeffs.did, model$coeftable[1,])
+  
+
+}
+
+
+core.did.estimates <- data.frame(cbind(colnames(df.temptemp)[17:38], (coeffs.did[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`)
+
+core.did.estimates <- core.did.estimates
+rownames(core.did.estimates) <- NULL
+
+core.did.estimates %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Estimate","95% CI")) %>% 
+  kable_styling(latex_options = c("striped")) %>%
+  pack_rows(index = c("Overall Impacts" = 4, "Quality of Care" = 6, "Patient Complexity" = 2, "Payer Mix" = 4, "Finances" = 6)) %>% 
+  add_header_above(c("IV-Estimated LATE Effects of Competitive Shocks on Incumbent Clinics" = 3))
+
+
+```
+
+
 
 
 
@@ -632,7 +714,7 @@ df.z.temp <- df.z %>% mutate(Tx = ifelse(value - 1 > 1, 1, value - 1)) %>% filte
                Pct.MCR = Medicare / NumberofPatients * 100, 
                Pct.COM = Private / NumberofPatients * 100,
                Pct.None = Uninsured / NumberofPatients * 100 ) %>% 
-  select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year, Zip, Att) 
+  select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year, Zip, Att, `BHCMIS ID`) 
 
  
 coeffs <- c(0,0,0,0, 0, 0, 0, 0)
@@ -730,7 +812,6 @@ df.z.temp %>%
 
 
 ```
-
 
 
 
