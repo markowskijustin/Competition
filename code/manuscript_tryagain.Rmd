@@ -184,5 +184,12 @@ did2s(
     )
 
 
+summary(feols(df.zip %>% 
+  mutate(Tx = nRivals - nRivals_min) %>% 
+  filter(nRivals_max >= nRivals_min) %>% 
+    mutate(Tx = ifelse(Tx > 0, 1, 0)) %>% 
+    filter(Tx >= 0) %>% ungroup() %>% mutate(ID = as.numeric(factor(paste(`BHCMISID`, Zip, sep = "-")))), Mean.Hours ~ Tx | ID + Year , cluster = "ID"))
+
+
 ```
 
