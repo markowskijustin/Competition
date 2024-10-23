@@ -354,15 +354,20 @@ df.temptemp <- df.temptemp %>%
   unique() 
 
 
-# df.temptemp <- df.temptemp %>% 
-#   left_join(uds.cw %>% filter(Year == 2011) %>% select(BHCMIS.ID:PH), by = c("BHCMIS ID" = "BHCMIS.ID")) %>% 
-#   mutate(ACA = ifelse((STATE %in% c('MI','NH') & Year >= 2014) |
-#                     (STATE %in% c('PA','IN','AK') & Year >= 2015) |
-#                     (STATE %in% c('MT','LA') & Year >= 2016) |
-#                     (STATE %in% c('VA','ME') & Year >= 2019) |
-#                     (STATE %in% c('ID','UT','NE') & Year >= 2020) |
-#                     (STATE %in% c('OK','MO') & Year >= 2021) |
-#                     (STATE %in% c('AZ','AR','CA','CO','CT','DE','DC','HI','IL','IA','KY','MD','MA','MN','NV','NJ','NM','NY','ND','OH','OR','PA','RI','VT','VA','WA') & Year >= 2014), 1, 0))
+coredata <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2012-Full-Dataset.xlsx", sheet = "HealthCenterInfo", skip = 0) %>% select(GrantNumber, FundingCHC:UrbanRuralFlag)
+
+
+
+df.temptemp <- df.temptemp %>%
+  left_join(uds.cw %>% filter(Year == 2011) %>% select(ModernGranteeID, BHCMIS.ID:PH), by = c("BHCMIS ID" = "BHCMIS.ID")) %>%
+  left_join(coredata %>% select(GrantNumber, UrbanRuralFlag), by = c("ModernGranteeID" = "GrantNumber")) %>% 
+  mutate(ACA = ifelse((STATE %in% c('MI','NH') & Year >= 2014) |
+                    (STATE %in% c('PA','IN','AK') & Year >= 2015) |
+                    (STATE %in% c('MT','LA') & Year >= 2016) |
+                    (STATE %in% c('VA','ME') & Year >= 2019) |
+                    (STATE %in% c('ID','UT','NE') & Year >= 2020) |
+                    (STATE %in% c('OK','MO') & Year >= 2021) |
+                    (STATE %in% c('AZ','AR','CA','CO','CT','DE','DC','HI','IL','IA','KY','MD','MA','MN','NV','NJ','NM','NY','ND','OH','OR','PA','RI','VT','VA','WA') & Year >= 2014), 1, 0))
 
 ```
 
@@ -389,7 +394,7 @@ for (k in 1:28){
   colnames(df.temptemptemp)[(16+k)] <- "Outcome"
   #model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless   | I((10000 - ClinicHHI)/1000) ~ Tx + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemptemp)
   #coeffs <- rbind(coeffs, model$coeftable[2,])
-  model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + MHC + HO + PH | ID + Year | I((10000 - ClinicHHI)/1000) ~ value, cluster = "ID", data = df.temptemptemp)
+  model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + MHC + HO + PH + UrbanRuralFlag| ID + Year | I((10000 - ClinicHHI)/1000) ~ value, cluster = "ID", data = df.temptemptemp)
   coeffs <- rbind(coeffs, model$coeftable[1,])
   
 
@@ -416,7 +421,9 @@ core.iv.estimates %>%
 
 
 
-summary(feols(df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)), I( Pct.None  ) ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year | I((10000 - ClinicHHI)/100) ~ Tx, cluster = "ID"))
+summary(feols(df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) %>% filter(value_min <= 2), 
+              Qcomp ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year | I((10000 - ClinicHHI)/100) ~ Tx, cluster = "ID"))
+
 
 ```
 
@@ -427,10 +434,10 @@ summary(feols(df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.n
 
 ```{r}
  did2s(
-      data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)  ) , 
+      data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)  ), 
       yname = "ClinicHHI", 
       treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = TRUE
@@ -439,7 +446,7 @@ summary(feols(df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.n
 
 
     event_study(data = df.temptemp,
-  yname = "ClinicHHI", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
+  yname = "ClinicHHI", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
   filter(abs(term) <= 6) %>%
   filter(estimator == "Gardner (2021)") %>%
   #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
@@ -459,7 +466,7 @@ summary(feols(df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.n
 ```{r}
 
  event_study(data = df.temptemp %>% filter(value_min == 1),
-  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
+  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
   filter(abs(term) <= 6) %>%
   filter(estimator == "Gardner (2021)") %>%
   #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
@@ -471,7 +478,7 @@ summary(feols(df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.n
 
 
  event_study(data = df.temptemp,
-  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
+  yname = "Qcomp", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
   filter(abs(term) <= 8) %>%
   filter(estimator == "Gardner (2021)") %>%
   #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
@@ -484,7 +491,7 @@ summary(feols(df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.n
 
  
   event_study(data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) %>% mutate(Att = ifelse(Att == 2010, 0, Att)),
-  yname = "Staff", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
+  yname = "Staff", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
   filter(abs(term) <= 8) %>%
   filter(estimator == "Gardner (2021)") %>%
   #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
@@ -514,7 +521,7 @@ for (k in 1:22){
       data = df.temptemptemp, 
       yname = "Outcome", 
       treatment = "Tx",
-        first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = TRUE
@@ -544,11 +551,11 @@ core.did.estimates %>%
 
 
 did2s(
-      data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) %>% mutate(Mix = Pct.COM * Total / 100) %>% filter(Year < 2020 ), 
-      yname = "Closed", 
+      data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) %>% mutate(Mix = Pct.COM * Total / 100) %>% filter(Year < 2020 ) %>% mutate(Urban = ifelse(UrbanRuralFlag == "Urban", 1, 0)) %>% filter(!is.na(Urban)), 
+      yname = "Staff", 
       treatment = "Tx",
         first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage = ~ i(Tx, ref = FALSE),
+        second_stage = ~ i(Tx, ref = FALSE) + I(Tx * value),
         cluster_var = "ID",
       verbose = TRUE
     )
@@ -562,6 +569,37 @@ df.temptemp %>%
 ```
 
 
+## Event Study
+
+```{r}
+
+es.direct <- did2s(
+  data = df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) %>% mutate(Mix = Pct.COM * Total / 100) %>% mutate(Urban = ifelse(UrbanRuralFlag == "Urban", 1, 0))  %>% mutate(rel_year = ifelse(Att == 0, Inf, Year - Att)) , 
+  yname = "Qcomp", 
+  treatment = "Tx",
+  first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year, 
+    second_stage = ~ i(rel_year, ref = c(-1, Inf)) ,
+    cluster_var = "ID", 
+  verbose = TRUE)
+
+
+ 
+cbind(YearRel = gsub("rel_year::", "", rownames(es.direct$coeftable)), 
+      cbind(Group = "Direct",es.direct$coeftable)) %>% 
+  data.frame() %>% 
+  mutate(estimate = as.numeric(Estimate), 
+         std.error = as.numeric(Std..Error), 
+         YearRel = as.numeric(YearRel)) %>% 
+  filter(abs(YearRel) <= 6) %>% 
+ ggplot(aes(x = YearRel, y = estimate, color = Group)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
+
+
+```
+
+
 
 
 
@@ -569,13 +607,13 @@ df.temptemp %>%
 ```{r}
 
 ## TWFE First Stage
-df.temptemptemp <- df.temptemp %>% select(ClinicHHI, Qcomp, MS, value, Year, ID, Pct.NHA:Pct.None, Tx) %>% ungroup() %>% filter(complete.cases(.))
+df.temptemptemp <- df.temptemp %>% select(ClinicHHI, Qcomp, MS, value, Year, ID, Pct.NHA:Pct.None, Tx, UrbanRuralFlag) %>% ungroup() %>% filter(complete.cases(.))
 
-reduced <- lm(data = df.temptemptemp, Qcomp ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
-firststage <- lm(data = df.temptemptemp, I((10000 - ClinicHHI)/1000) ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
+reduced <- lm(data = df.temptemptemp, Qcomp ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag )
+firststage <- lm(data = df.temptemptemp, I((10000 - ClinicHHI)/1000) ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless+ UrbanRuralFlag )
 
 
-model <- lm(data = df.temptemptemp, Complexity ~ firststage$fitted.values + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless+ factor(Year) + factor(ID))
+model <- lm(data = df.temptemptemp, Complexity ~ firststage$fitted.values + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag+ factor(Year) + factor(ID))
 
 m1coeffs_cl <- coeftest(model, vcov = vcovCL, cluster = ~ID)
 m1coeffs_cl
@@ -606,13 +644,13 @@ m1coeffs_cl
 ## Basic Linear Reg
 ```{r}
 
-reduced <- lm(data = df.temptemptemp, Qcomp ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
+reduced <- lm(data = df.temptemptemp, Qcomp ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag )
 head(summary(reduced)$coeff) %>% as.data.frame()
 
-reduced <- lm(data = df.temptemptemp, Complexity ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
+reduced <- lm(data = df.temptemptemp, Complexity ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag )
 head(summary(reduced)$coeff) %>% as.data.frame()
 
-reduced <- lm(data = df.temptemptemp, Closed ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless )
+reduced <- lm(data = df.temptemptemp, Closed ~ value + factor(Year) + factor(ID) + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag )
 head(summary(reduced)$coeff) %>% as.data.frame()
 
 
@@ -763,7 +801,7 @@ df.z <- left_join(df.temptemp,
   mutate(Tx.z = ifelse(Clinics == 1 , 0, 
                 ifelse(is.na(Clinics), NA, 1)), # | is.na(Clinics)
          ID = as.numeric(factor(paste(`BHCMIS ID`, Zip, sep = "-")))) %>%
-  select(`BHCMIS ID`:Year, Att, ID, Zip:Tx.z) %>%
+  select(`BHCMIS ID`:Year, Att, ID, Zip:Tx.z, UrbanRuralFlag) %>%
   arrange(`BHCMIS ID`, Zip, Year) %>% 
   unique() #%>%  inner_join(df.qual.exp %>% filter(Year == 2015 & Total > 12050) %>% select(`Grant Number`), by = c("Grant Number"))  #& Zips < 3.75 or 4.75
   # %>%   filter(MarketShare > median(MarketShare, na.rm = TRUE) - 0.25) 
@@ -824,7 +862,7 @@ df.z.temp <- df.z %>% mutate(Tx = ifelse(value - 1 >= 1, 1, value - 1)) %>% filt
                Pct.MCR = Medicare / NumberofPatients * 100, 
                Pct.COM = Private / NumberofPatients * 100,
                Pct.None = Uninsured / NumberofPatients * 100 ) %>% 
-  select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year, Zip, Att, `BHCMIS ID`) 
+  select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year, Zip, Att, `BHCMIS ID`, UrbanRuralFlag) 
 
  
 coeffs <- c(0,0,0,0, 0, 0, 0, 0)
@@ -839,6 +877,7 @@ for (k in 1:8){
       treatment = "Tx",
         first_stage = ~ 1 | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx * (1 - DirectlyTreated), ref = FALSE)  + I(Tx * DirectlyTreated),
+      #second_stage = ~ i(Tx , ref = FALSE)  + I(Tx * DirectlyTreated),
         cluster_var = "ID",
       verbose = TRUE
     )
@@ -853,19 +892,21 @@ zip.estimates <- data.frame(cbind(colnames(df.z.temp)[1:8], (coeffs[-1,]))) %>%
   #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
   mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
   mutate(Estimate.1 = round(as.numeric(Estimate.1), 2), `95% CI.1` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(`Std..Error.1`), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(`Std..Error.1`), 2), sep = "")) %>% 
-  select(V1, Estimate, `95% CI`, Estimate.1, `95% CI.1`)
+  select(V1, Estimate, `95% CI`, `Pr...t..`, Estimate.1, `95% CI.1`, `Pr...t...1`)
 
 zip.estimates <- zip.estimates[c(1, 6, 2:5, 7:8),]
 rownames(zip.estimates) <- NULL
 
 zip.estimates %>% 
-  kable("html", booktabs = T, col.names = c("Outcome","Estimate","95% CI","Estimate","95% CI")) %>% 
+  kable("html", booktabs = T, col.names = c("Outcome","Estimate","95% CI","p-value", "Estimate","95% CI", "p-value")) %>% 
   kable_styling(latex_options = c("striped")) %>%
   pack_rows(index = c("Overall Impacts" = 2, "Patient and Payer Mix" = 4, "Access" = 2)) %>% 
-  add_header_above(c(" " = 1, "Directly Competitive" = 2, "Indirectly Competitive" = 2)) %>% 
-  add_header_above(c("DID-Estimated Effects of Competitive Shocks on Zip Codes in Incumbent Clinics' Service Area" = 5))
+  add_header_above(c(" " = 1, "Directly Competitive" = 3, "Indirectly Competitive" = 3)) %>% 
+  add_header_above(c("DID-Estimated Effects of Competitive Shocks on Zip Codes in Incumbent Clinics' Service Area" = 7))
 
 ## WATCH OUT FOR THE INTERACTION INTERPRETATION
+
+
 
 
 
@@ -879,27 +920,38 @@ zip.estimates %>%
 ## Event Study
 
 ```{r}
- event_study(data = df.z.temp %>% filter(Att == 0 | (Att > 0 & DirectlyTreated == 0)),
-  yname = "Total.Hours", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~1) %>%
-  filter(abs(term) <= 8) %>%
-  filter(estimator == "Gardner (2021)") %>%
-  #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
+
+es.direct <- did2s(
+  data = df.z.temp2 %>% mutate(rel_year = ifelse(Att == 0, Inf, Year - Att)) %>% filter(Att == 0 | DirectlyTreated == 1), 
+  yname = "Sites", 
+  treatment = "Tx",
+  first_stage = ~ 0 | ID + Year, 
+    second_stage = ~ i(rel_year, ref = c(-1, Inf)) ,
+    cluster_var = "ID", 
+  verbose = FALSE)
+
+es.indirect <- did2s(
+  data = df.z.temp2 %>% mutate(rel_year = ifelse(Att == 0, Inf, Year - Att)) %>% filter(Att == 0 | DirectlyTreated == 0), 
+  yname = "Sites", 
+  treatment = "Tx",
+  first_stage = ~ 0 | ID + Year, 
+    second_stage = ~ i(rel_year, ref = c(-1, Inf)) ,
+    cluster_var = "ID", 
+  verbose = FALSE)
+
+
+cbind(YearRel = c(gsub("rel_year::", "", rownames(es.direct$coeftable)), gsub("rel_year::", "", rownames(es.indirect$coeftable))), 
+      rbind(cbind(Group = "Direct",es.direct$coeftable), cbind(Group = "Indirect",es.indirect$coeftable))) %>% 
+  data.frame() %>% 
+  mutate(estimate = as.numeric(Estimate), 
+         std.error = as.numeric(Std..Error), 
+         YearRel = as.numeric(YearRel)) %>% 
+  filter(abs(YearRel) <= 6) %>% 
+ ggplot(aes(x = YearRel, y = estimate, color = Group)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
 
-
-
- event_study(data = df.z.temp %>% filter(Att == 0 | (Att > 0 & DirectlyTreated == 1)),
-  yname = "Total.Hours", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~1) %>%
-  filter(abs(term) <= 8) %>%
-  filter(estimator == "Gardner (2021)") %>%
-  #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
 
 ```
 
@@ -973,7 +1025,7 @@ df.z <- left_join(df.temptemp,
   mutate(Tx.z = ifelse(Clinics == 1 , 0, 
                 ifelse(is.na(Clinics), NA, 1)), # | is.na(Clinics)
          ID = as.numeric(factor(paste(`BHCMIS ID`, Zip, sep = "-")))) %>%
-  select(`BHCMIS ID`:Year, Att, ID, Zip:Tx.z, Tx) %>%
+  select(`BHCMIS ID`:Year, Att, ID, Zip:Tx.z, Tx, UrbanRuralFlag) %>%
   arrange(`BHCMIS ID`, Zip, Year) %>% 
   unique() #%>%  inner_join(df.qual.exp %>% filter(Year == 2015 & Total > 12050) %>% select(`Grant Number`), by = c("Grant Number"))  #& Zips < 3.75 or 4.75
   # %>%   filter(MarketShare > median(MarketShare, na.rm = TRUE) - 0.25) 
@@ -1003,7 +1055,7 @@ df.z.full <- df.z %>% ############## NOTE: Original +500 effect was recoved with
   mutate(ID = as.numeric(as.factor(Zip)))# %>% group_by(`Grant Number`, Year, Att) %>% summarise(ID = min(ID), Total.z = sum(Total.z, na.rm = TRUE)) # %>% filter(Year > 2015),
 
 
-df.zip.1 <- df.z %>% select(ID, Year, Att, NumberofPatients)
+df.zip.1 <- df.z %>% select(ID, Year, Att, NumberofPatients, UrbanRuralFlag)
 df.zip.2 <- df.z.full %>% select(ID, Year, Att.z, Total.z:Quality.z)
 
 
@@ -1144,7 +1196,6 @@ quantile(df.z.dist.plot$DistToClosestSite, probs = 0.95)
 
 ## Find distance to rival for all CHCs in sample
 
-Takes a fair bit to run (~ 15 minutes)
 ```{r}
 
 
@@ -1165,7 +1216,7 @@ zipdist <- df.z.temp %>%
   left_join(zipdist %>%
   select(BHCMISID.x, ZipCode) %>%
   unique(), by = c("BHCMIS ID" = "BHCMISID.x")) %>%
-  select(`BHCMIS ID`, Zip, Att, DirectlyTreated, Tx, ZipCode) %>%
+  select(`BHCMIS ID`, Zip, Att, DirectlyTreated, Tx, ZipCode, UrbanRuralFlag) %>%
   unique()
 
 
@@ -1177,20 +1228,43 @@ zipdist <- zipdist %>%
 
 
 
-zipdist <- zipdist %>% mutate(DistToClosestSite = NA)
+zipdist <- zipdist %>% mutate(DistToClosestSite = NA, ZiplevelDistToClosestSite = NA, DistToFarthestSite = NA)
 
 for (g in c(1:695, 697:795, 797:800, 802:847, 849:852)){ 
-
+  
   temp1 <- zipdist %>% 
   filter(CountingIDs == g)
   
   leaveout <- length(unique(temp1$Zip))
   temp <- zip.centroids %>% filter(ZipCode %in% c(unique(temp1$Zip), unique(temp1$ZipCode)))
 
-  mm <- as.matrix(dist(as.matrix(temp$X, temp$Y), method = "euclidean", diag = TRUE))[-c(1:leaveout),c(1:leaveout)]
+    ## Calc Farthest Site Distance
+  mm <- as.matrix(dist(as.matrix(temp$X, temp$Y), method = "euclidean", diag = TRUE))[c(1:leaveout),-c(1:leaveout)]
+  zipdist[zipdist$CountingIDs == g,]$DistToFarthestSite <-  max(mm) * 111.139
+  
+  ## Calc Closest Site Distance
+  mm <- as.matrix(dist(as.matrix(temp$X, temp$Y), method = "euclidean", diag = TRUE))[c(1:leaveout),-c(1:leaveout)]
   zipdist[zipdist$CountingIDs == g,]$DistToClosestSite <-  min(mm) * 111.139
- 
-}
+  
+  
+## Calc Closest Site Distance by zip
+  if (is.null(dim(mm))) {
+          ZipLevel <- data.frame(Zip = unique(temp1$Zip), ZiplevelDistToClosestSite = min(mm, na.rm = TRUE) * 111.139)
+  }else{
+      ZipLevel <- data.frame(Zip = unique(temp1$Zip), ZiplevelDistToClosestSite = apply(mm, 1, FUN = min, na.rm = TRUE) * 111.139)
+  }
+  
+  zipdist[zipdist$Zip %in% ZipLevel$Zip & zipdist$CountingIDs == g,]$ZiplevelDistToClosestSite <- zipdist[zipdist$Zip %in% ZipLevel$Zip & zipdist$CountingIDs == g,] %>% 
+        ungroup() %>% 
+    select(`BHCMIS ID`:DistToClosestSite) %>% 
+    left_join(ZipLevel, by = c("Zip")) %>% 
+    select(ZiplevelDistToClosestSite) %>% 
+    unlist()
+  
+  if (as.integer(g/100) == g/100) {print(g)}
+  
+} 
+
 
 
 zipdist
@@ -1200,7 +1274,79 @@ length(unique(zipdist$`BHCMIS ID`))
 
 
 
+
+
 ```
+
+
+
+
+## Alt by year
+Takes a couple minutes to run (~ 15)
+
+```{r}
+
+
+# zipdist <- uds.zip %>%
+#  # filter(ReportingYear == 2012) %>%
+#   select(BHCMISID, GrantNumber, ZipCode, ReportingYear) %>%
+#   unique() %>%
+#   left_join(df.z.temp , by = c("BHCMISID" = "BHCMIS ID", "ZipCode" = "Zip","ReportingYear" = "Year")) %>%
+#   filter(is.na(ID)) %>%
+#   select(`BHCMISID`:ZipCode, ReportingYear) %>%
+#   left_join(uds.zip, by = c("ZipCode","ReportingYear")) %>%
+#   select(ZipCode, BHCMISID.x, BHCMISID.y, ReportingYear) %>%
+#   filter(BHCMISID.x != BHCMISID.y)
+# 
+# inclusion <- zipdist %>%
+#   select(BHCMISID.x, ZipCode, ReportingYear) %>%
+#   unique()
+# 
+# 
+# ## This next line takes a minute to run
+# zipdist <- df.z.temp %>%
+#   left_join(inclusion, by = c("BHCMIS ID" = "BHCMISID.x", "Year" = "ReportingYear")) %>%
+#   select(`BHCMIS ID`, Zip, Att, DirectlyTreated, Tx, ZipCode, Year) %>%
+#   unique()
+# 
+# 
+# 
+# zipdist <- zipdist %>%
+#   filter(Year >= 2012) %>%
+#   #group_by(`BHCMIS ID`) %>%
+#   mutate(CountingIDs = as.numeric(factor(paste(`BHCMIS ID`, Year, sep = "-"))))
+# 
+# 
+# length(unique(zipdist$CountingIDs))
+# 
+# 
+# zipdist <- zipdist %>% mutate(DistToClosestSite = NA)
+# 
+# for (g in c(1:9301)){
+# 
+#   temp1 <- zipdist %>%
+#   filter(CountingIDs == g)
+# 
+#   leaveout <- length(unique(temp1$Zip))
+#   temp <- zip.centroids %>% filter(ZipCode %in% c(unique(temp1$Zip), unique(temp1$ZipCode)))
+# 
+#   mm <- as.matrix(dist(as.matrix(temp$X, temp$Y), method = "euclidean", diag = TRUE))[-c(1:leaveout),c(1:leaveout)]
+#   zipdist[zipdist$CountingIDs == g,]$DistToClosestSite <-  min(mm) * 111.139
+# 
+#   if (as.integer(g/100) == g/100) {print(g)}
+# }
+# 
+# 
+# zipdist
+
+
+
+
+
+
+```
+
+
 
 
 
@@ -1209,16 +1355,37 @@ length(unique(zipdist$`BHCMIS ID`))
 ```{r}
 
 
-df.iv <- df.temptemp %>% 
-  mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% 
-  filter(!is.na(Tx)) %>% 
-  left_join(zipdist %>% 
-  group_by(`BHCMIS ID`) %>% 
-  mutate(DistToClosestSite = min(DistToClosestSite, na.rm = TRUE)) %>% 
-  select(`BHCMIS ID`, DistToClosestSite) %>% 
-  unique(), by = c("BHCMIS ID")) %>% 
-  mutate(Z = log(1 / DistToClosestSite)) %>% 
-  filter(!is.infinite(Z)) 
+df.iv <- df.temptemp %>%
+  mutate(Tx = ifelse(Tx > 1, 1, 0)) %>%
+  filter(!is.na(Tx)) %>%
+  left_join(zipdist %>%
+  select(`BHCMIS ID`, DistToClosestSite, ZiplevelDistToClosestSite, DistToFarthestSite) %>%
+  unique(), by = c("BHCMIS ID")) %>%
+  #mutate(DistToClosestSite = ifelse(DistToClosestSite > 100, 100, DistToClosestSite)) %>% 
+  mutate(Z = log(1 / (DistToClosestSite / DistToFarthestSite))) %>%
+  filter(!is.infinite(Z))
+
+
+iv_model <- feols(df.iv, Pct.None ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | Year | I((10000 - ClinicHHI)/1000) ~ Z , cluster = "ID")
+summary(iv_model)
+
+
+summary(lm(data = df.iv, Tx ~ Z))
+
+
+# df.iv <- df.temptemp %>% 
+#   mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% 
+#   filter(!is.na(Tx)) %>% 
+#   left_join(zipdist %>% 
+#   group_by(`BHCMIS ID`, Year) %>% 
+#   mutate(DistToClosestSite = min(DistToClosestSite, na.rm = TRUE)) %>% 
+# select(`BHCMIS ID`, Year, DistToClosestSite) %>% 
+# unique(), by = c("BHCMIS ID", "Year")) %>% 
+#   mutate(Z = log(1 / DistToClosestSite)) %>% 
+#   filter(!is.infinite(Z)) 
+
+
+
 
 # %>%  
 #   ungroup()%>% 
@@ -1226,10 +1393,9 @@ df.iv <- df.temptemp %>%
 #   filter(complete.cases(.)) 
 
 
+hist(df.iv$Z, na.rm = T)
 
-iv_model <- feols(df.iv, Qcomp ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + MHC + HO + PH | Year | I((10000 - ClinicHHI)/1000) ~ Z, cluster = "ID")
 
-summary(iv_model)
 
 
 ```
@@ -1245,11 +1411,11 @@ coeffs <- c(0,0,0,0)
 
 for (k in 1:28){
 
-  df.temptemptemp <- df.iv
+  df.temptemptemp <- df.iv 
   colnames(df.temptemptemp)[(16+k)] <- "Outcome"
   #model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless   | I((10000 - ClinicHHI)/1000) ~ Tx + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemptemp)
   #coeffs <- rbind(coeffs, model$coeftable[2,])
-  model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless  | Year | I((10000 - ClinicHHI)/1000) ~ Z, cluster = "ID", data = df.temptemptemp)
+  model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | Year | I((10000 - ClinicHHI)/1000) ~ Z, cluster = "ID", data = df.temptemptemp)
   coeffs <- rbind(coeffs, model$coeftable[1,])
   
 
@@ -1271,6 +1437,16 @@ core.iv.estimates.alt %>%
   add_header_above(c("IV-Estimated LATE Effects of Competitive Shocks on Incumbent Clinics" = 3))
 
 
+did2s(
+      data = df.iv,
+      yname = "Total",
+      treatment = "Tx",
+        first_stage = ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
 ```
 
 
@@ -1282,12 +1458,22 @@ core.iv.estimates.alt %>%
 
 
 df.z.temp2 <- df.z.temp %>% 
-  left_join(df.iv %>% ungroup() %>%  select(`BHCMIS ID`, Z, MHC, HO, PH) %>% unique(), by = c("BHCMIS ID")) %>% 
-  left_join(df.temptemp %>% ungroup() %>% select(`BHCMIS ID`, Year, ClinicHHI), by = c("BHCMIS ID", "Year"))
+  left_join(df.iv %>% ungroup() %>%  select(`BHCMIS ID`, Z, MHC, HO, PH, value) %>% unique(), by = c("BHCMIS ID"))
   
 
- 
 
+feols(Sites ~ 1 |  Year | Tx*DirectlyTreated ~  Z, cluster = "ID", data = df.z.temp2)
+
+
+did2s(
+      data = df.z.temp2,
+      yname = "NumberofPatients",
+      treatment = "Tx",
+        first_stage = ~ 1 | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
+        second_stage = ~ i(Tx * (1 - DirectlyTreated), ref = FALSE)  + I(Tx * DirectlyTreated),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
 
 
 ```
