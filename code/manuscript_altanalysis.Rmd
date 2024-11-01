@@ -844,16 +844,38 @@ rownames(core.did.estimates) <- NULL
 df.temptemp %>% 
   mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
   group_by(Post, Treat) %>% 
-  select(Qcomp:Closed) %>% 
+  select(Qcomp:Staff) %>% 
   summarise_all(mean.nas) %>% 
   # summarise(Total = mean(Total, na.rm = TRUE), 
   #           Quality = mean(Qcomp, na.rm = TRUE), 
   #           Finances = mean(Altman, na.rm = TRUE)) %>% 
-  pivot_longer(cols = Qcomp:Closed) %>% 
+  pivot_longer(cols = Qcomp:Staff) %>% 
   mutate(value = round(value, 2)) %>% 
   #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
   pivot_wider(id_cols = name, names_from = c(Treat, Post), values_from = value) %>% 
   mutate(Unadjusted = (Treated_1 - Treated_0) - (Control_1 - Control_0)) %>% 
+  rbind(
+    
+    cbind(name = "Closed", 
+    df.temptemp %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
+  filter(!is.na(value)) %>% 
+  group_by(Post, Treat) %>% 
+  select(Closed) %>% 
+  summarise_all(mean.nas) %>% 
+  # summarise(Total = mean(Total, na.rm = TRUE), 
+  #           Quality = mean(Qcomp, na.rm = TRUE), 
+  #           Finances = mean(Altman, na.rm = TRUE)) %>% 
+  #mutate(value = round(value, 2)) %>% 
+  #filter(name %in% c("Total", "Qcomp", "Altman")) %>% 
+  pivot_wider(names_from = c(Treat, Post), values_from = Closed) %>% 
+  mutate(Unadjusted = (Treated_1 - Treated_0) - (Control_1 - Control_0)))
+  
+  
+  
+  ) %>% 
+  
+  
   cbind(core.did.estimates) %>% 
    select(name, `Control_0`, `Control_1`, `Treated_0`, `Treated_1`, Unadjusted, Estimate, `95% CI`, Pr...t..) %>% 
   mutate(`% Change` = round(Estimate / `Treated_0` * 100, 1)) %>% 
@@ -868,12 +890,8 @@ df.temptemp %>%
 
 
 
-df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) %>% 
-  ungroup() %>% 
-  filter(!is.na(value)) %>% 
-  select(Year, Closed) %>% 
-  group_by(Year) %>% 
-  summarize(mean(Closed))
+
+
 
 ```
 
@@ -882,7 +900,7 @@ df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1
 
 ```{r}
 
-coeffs.did.strat <- c(0,0,0,0, 0, 0, 0, 0, 0, 0, 0, 0)
+coeffs.did.strat <- c(0,0,0,0, 0, 0, 0, 0)
 
 for (k in 1:23){
 
@@ -894,41 +912,70 @@ for (k in 1:23){
   df.temptemptemp <- df.temptemptemp %>% 
     mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
                             ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
-  model <-  did2s(
-      data = df.temptemptemp, 
-      yname = "Outcome", 
+  
+   model <-  did2s(
+      data = df.temptemptemp,
+      yname = "Outcome",
       treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage =~ i(Tx*ifelse(value_min== 1, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min==2, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min>= 3, 1, 0), ref = FALSE),
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
+        second_stage =~ i(Tx*ifelse(value_min== 1, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min>=2, 1, 0), ref = FALSE),
+        #second_stage =~ i(Tx, ref = FALSE) + I(as.numeric(Tx) * as.numeric(value_min)) ,
         cluster_var = "ID",
       verbose = TRUE
     )
 
-  coeffs.did.strat <- rbind(coeffs.did.strat, c(model$coeftable[1,], model$coeftable[2,], model$coeftable[3,]))
-  
+  coeffs.did.strat <- rbind(coeffs.did.strat, c(model$coeftable[1,], model$coeftable[2,]))
+
 
 }
 
 
-core.did.estimates.strat <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.strat[-1,]))) %>% 
-  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
-  mutate(EstimateFirst = round(as.numeric(Estimate), 2), `95% CI First` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(Std..Error), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(Std..Error), 2), sep = "")) %>% 
-  mutate(EstimateSecond = round(as.numeric(Estimate.1), 2), `95% CI Second` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(Std..Error.1), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(Std..Error.1), 2), sep = "")) %>% 
-  mutate(EstimateMore = round(as.numeric(Estimate.2), 2), `95% CI More` = paste(round(as.numeric(Estimate.2) - 1.96 * as.numeric(Std..Error.2), 2), ", ", round(as.numeric(Estimate.2) + 1.96 * as.numeric(Std..Error.2), 2), sep = "")) %>% 
-  select(V1, EstimateFirst, `95% CI First`, Pr...t.., EstimateSecond, `95% CI Second`, Pr...t...1, EstimateMore, `95% CI More`, Pr...t...2)
+core.did.estimates.strat <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.strat[-1,]))) %>%
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>%
+  mutate(EstimateFirst = round(as.numeric(Estimate), 2), `95% CI First` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(Std..Error), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(Std..Error), 2), sep = "")) %>%
+  mutate(EstimateSecond = round(as.numeric(Estimate.1), 2), `95% CI Second` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(Std..Error.1), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(Std..Error.1), 2), sep = "")) %>%
+  select(V1, EstimateFirst, `95% CI First`, Pr...t.., EstimateSecond, `95% CI Second`, Pr...t...1)
 
 core.did.estimates.strat <- core.did.estimates.strat
 rownames(core.did.estimates.strat) <- NULL
 
-core.did.estimates.strat
+core.did.estimates.strat[c(1, 2, 3, 4, 11:13, 16:23),] 
+
+#   model <-  did2s(
+#       data = df.temptemptemp,
+#       yname = "Outcome",
+#       treatment = "Tx",
+#         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
+#         second_stage =~ i(Tx*ifelse(value_min== 1, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min==2, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min>= 3, 1, 0), ref = FALSE),
+#         cluster_var = "ID",
+#       verbose = TRUE
+#     )
+# 
+#   coeffs.did.strat <- rbind(coeffs.did.strat, c(model$coeftable[1,], model$coeftable[2,], model$coeftable[3,]))
+# 
+# 
+# }
+# 
+# 
+# core.did.estimates.strat <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.strat[-1,]))) %>%
+#   #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>%
+#   mutate(EstimateFirst = round(as.numeric(Estimate), 2), `95% CI First` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(Std..Error), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(Std..Error), 2), sep = "")) %>%
+#   mutate(EstimateSecond = round(as.numeric(Estimate.1), 2), `95% CI Second` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(Std..Error.1), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(Std..Error.1), 2), sep = "")) %>%
+#   mutate(EstimateMore = round(as.numeric(Estimate.2), 2), `95% CI More` = paste(round(as.numeric(Estimate.2) - 1.96 * as.numeric(Std..Error.2), 2), ", ", round(as.numeric(Estimate.2) + 1.96 * as.numeric(Std..Error.2), 2), sep = "")) %>%
+#   select(V1, EstimateFirst, `95% CI First`, Pr...t.., EstimateSecond, `95% CI Second`, Pr...t...1, EstimateMore, `95% CI More`, Pr...t...2)
+# 
+# core.did.estimates.strat <- core.did.estimates.strat
+# rownames(core.did.estimates.strat) <- NULL
+# 
+# core.did.estimates.strat[c(1, 2, 3, 4, 11:13, 16:23),]
 
 
 did2s(
       data = df.temptemptemp, 
-      yname = "Outcome", 
+      yname = "Qcomp", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage =~ i(Tx*as.numeric(value_first)) ,
+        second_stage =~ i(Tx, ref = FALSE) + I(as.numeric(Tx) * as.numeric(value_first - 1)) ,
         cluster_var = "ID",
       verbose = TRUE
     )
