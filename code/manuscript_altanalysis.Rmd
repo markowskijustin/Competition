@@ -1335,9 +1335,13 @@ df.z.temp %>%
   mutate(PctMedicaid = Medicaid / MCD.denom * 100, 
          PctUninsured = Uninsured / Unins.denom * 100, 
          PctPoverty = IncomeBelowPoverty / PovertyStatusDet * 100, 
+         PctUnemployed = Unemployed / Unemp_denom * 100, 
          PctBlack = Black / TotalPop * 100, 
-         PctHispanic = Hispanic / TotalPop * 100) %>% 
-    select(Status, TotalPop, PctMedicaid:PctHispanic) %>% 
+         PctHispanic = Hispanic / TotalPop * 100, 
+         PctChildren = AgeUnder18 / TotalPop * 100, 
+         PctElderly = Age65andOver / TotalPop * 100, 
+         PctEducLow = EducLow / TotalPop * 100) %>% 
+    select(Status, TotalPop, PctMedicaid:PctEducLow, UrbanRuralFlag) %>% 
     tbl_summary(by = Status, 
                 statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
   add_p()
@@ -1613,6 +1617,22 @@ df.z.dist.plot[df.z.dist.plot$DistToClosestSite > 16.09,] %>%
 
 df.z.dist.plot[df.z.dist.plot$DistToClosestSite > 16.09,] %>% 
   left_join(df.temptemp %>% filter(Year == 2011), by = c("BHCMIS ID.y" = "BHCMIS ID"))
+
+
+
+
+
+df.z.dist %>% 
+  arrange(DistToClosestSite) %>% 
+  ggplot(aes(x=DistToClosestSite)) + 
+  geom_histogram(binwidth = 1, fill="lightgrey", color="white") + 
+  xlim(0, 100) +
+  stat_bin(aes(y=cumsum(..count..)/sum(..count..)*100 *3/2), binwidth = 1, geom="line", color="blue") + 
+  scale_y_continuous(name = 'Number of Rivals', 
+                     sec.axis = sec_axis(~.*2/3, name = "Cumulative percentage (%)")) + 
+  theme_tufte_revised() + 
+  ggtitle("FQHC Rivals by Distance from Service Area to New Competitive Zip") + 
+  xlab("Distance Travelled (km)")
 
 ```
 
@@ -1894,6 +1914,11 @@ did2s(
 ```
 
 
+# Save Datasets
+```{r}
+#df.z.temp %>% write_csv("/Users/markow/Dropbox/Git/Competition/data_processed/final_manuscript_allocation.csv")
+#df.temptemp %>% write_csv("/Users/markow/Dropbox/Git/Competition/data_processed/final_manuscript_core.csv")
+```
 
 
 
