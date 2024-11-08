@@ -1004,7 +1004,17 @@ df.temptemp %>%
   filter(!is.na(value) & value_min > 1) %>% 
   group_by(Post, Treat) %>% 
   select(Closed) %>% 
-  summarise_all(mean.nas)
+  summarise(mean.nas, n())
+
+df.temptemp %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
+  filter(!is.na(value) & value_min > 1) %>% 
+  group_by(Post, Treat) %>% 
+  select(Closed) %>% 
+  summarise(n())
+
+df.temptemp %>% 
+  filter(Tx == 1 & Closed == 100 & value > 2)
 
 ```
 
