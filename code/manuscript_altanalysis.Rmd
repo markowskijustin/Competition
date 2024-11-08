@@ -27,6 +27,7 @@ library(fixest)
 library(sandwich)
 library(lmtest)
 library("viridis")
+library(DescTools)
 
 ```
 
@@ -630,7 +631,7 @@ plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
 
 p.desc <- ggarrange(plot1, plot0, ncol = 1) 
 
-p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2021", face = "bold", size = 14))
+p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2023", face = "bold", size = 14))
 
 #ggsave(filename = "Figure1.png", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Figures", plot = p.desc, width = 8, height = 11)
 
@@ -841,10 +842,25 @@ rownames(core.did.estimates) <- NULL
 
 
 
+
+
+winsors <- function(x){ Winsorize(x, val = quantile(x, probs = c(0.01, 0.99), na.rm = TRUE))} 
+
+
+
+
+
 df.temptemp %>% 
   mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
-  group_by(Post, Treat) %>% 
+  select(Post, Treat) %>% 
+  cbind(
+df.temptemp %>% 
+  ungroup() %>% 
   select(Qcomp:Staff) %>% 
+  summarise_all(winsors)
+) %>% 
+  group_by(Post, Treat) %>% 
+  
   summarise_all(mean.nas) %>% 
   # summarise(Total = mean(Total, na.rm = TRUE), 
   #           Quality = mean(Qcomp, na.rm = TRUE), 
@@ -891,6 +907,19 @@ df.temptemp %>%
 
 
 
+
+```
+
+
+## Benjamini Hochberg
+```{r}
+core.did.estimates %>% 
+  arrange(`Pr...t..`) %>% 
+  mutate(`Pr...t..` = as.numeric(`Pr...t..`)) %>% 
+  cbind(c(1:nrow(core.did.estimates)) / nrow(core.did.estimates) * 0.1) %>% 
+  mutate(Row = row_number()) %>% 
+  ggplot(aes(x = Row, y = `Pr...t..`)) + geom_point() + 
+  ylab("p-values") + xlab("Significance Rank") + geom_abline(slope = 1/nrow(core.did.estimates) * 0.1, intercept = 0, color="red", linetype="dashed", alpha=.5) + theme_minimal()
 
 
 ```
@@ -970,15 +999,62 @@ core.did.estimates.strat[c(1, 2, 3, 4, 11:13, 16:23),]
 # core.did.estimates.strat[c(1, 2, 3, 4, 11:13, 16:23),]
 
 
-did2s(
+df.temptemp %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
+  filter(!is.na(value) & value_min > 1) %>% 
+  group_by(Post, Treat) %>% 
+  select(Closed) %>% 
+  summarise_all(mean.nas)
+
+```
+
+
+
+## Compared to pre-2020 estimates
+```{r}
+
+
+coeffs.did.pre2020 <- c(0,0,0,0)
+
+for (k in 1:23){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx) & Year < 2020) #%>% filter(Att %notin% c(2011))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  model <-  did2s(
       data = df.temptemptemp, 
-      yname = "Qcomp", 
+      yname = "Outcome", 
       treatment = "Tx",
         first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
-        second_stage =~ i(Tx, ref = FALSE) + I(as.numeric(Tx) * as.numeric(value_first - 1)) ,
+        second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = TRUE
     )
+
+
+  coeffs.did.pre2020 <- rbind(coeffs.did.pre2020, model$coeftable[1,])
+  
+
+}
+
+
+core.did.estimates.pre2020 <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.pre2020[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Pr...t..)
+
+core.did.estimates.pre2020 <- core.did.estimates.pre2020
+rownames(core.did.estimates) <- NULL
+
+
+
+cbind(core.did.estimates, core.did.estimates.pre2020)
+
 
 ```
 
@@ -1107,6 +1183,16 @@ df.temptemp %>% #left_join(df.temptemp %>% filter(Tx == 1) %>% summarise(Att = m
 
 
 
+## Closures? Mergers? 
+
+```{r}
+
+df.temptemp %>% 
+  filter(Closed == 100 & !is.na(Tx)) %>% 
+  select(ModernGranteeID, `BHCMIS ID`, Year)
+  
+H80CS00003
+```
 
 
 
@@ -1276,8 +1362,26 @@ did2s(
     )
 
 ```
+## Back of the envelop
+
+```{r}
 
 
+
+asdf <- df.z.temp %>% 
+  filter(Year == 2012) %>% 
+  filter(Att > 0) %>% 
+  group_by(DirectlyTreated) %>% 
+  summarise(Counts = n(), Hours = mean.nas(Total.Hours)) %>% 
+  cbind(Changes = c(zip.estimates[3,5], zip.estimates[3,2])) %>% 
+  summarise(Num = abs(Changes * Counts), Denom = Hours * Counts) %>% 
+  colSums()
+  
+
+asdf[1] / asdf[2]
+  
+
+```
 
 
 
