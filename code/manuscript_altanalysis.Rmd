@@ -779,13 +779,13 @@ core.iv.estimates %>%
   
   
   
-  outlier.vals <- quantile(df.temptemp$Total, p = c(0.01, 0.99), na.rm = TRUE)
-   event_study(data = df.temptemp %>% mutate(ifelse(Att == 2009, 0, Att)) %>% mutate(Total = ifelse(Total <= outlier.vals[1], outlier.vals[1], 
-                            ifelse(Total >= outlier.vals[2], outlier.vals[2], Total))),
-  yname = "Staff", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
+  outlier.vals <- quantile(df.temptemp$Altman, p = c(0.01, 0.99), na.rm = TRUE)
+   event_study(data = df.temptemp %>% mutate(ifelse(Att == 2009, 0, Att)) %>% mutate(Altman = ifelse(Altman <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Altman >= outlier.vals[2], outlier.vals[2], Altman))),
+  yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
   filter(abs(term) <= 7) %>%
   filter(estimator == "Gardner (2021)") %>%
-  #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
+  #filter(estimator != "Callaway and Sant'Anna (2020)") %>%
   ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
