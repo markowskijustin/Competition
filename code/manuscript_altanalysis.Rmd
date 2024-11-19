@@ -925,6 +925,70 @@ core.did.estimates %>%
 ```
 
 
+
+
+## Formal Pre-trends
+
+
+```{r}
+
+
+pretrends <- c(0,0,0,0,0)
+for (k in 1:23){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) #%>% filter(Att %notin% c(2011))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  model <-  did2s(
+      data = df.temptemptemp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(year.rel, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+pretrends <- rbind(pretrends, cbind(Outcome = colnames(df.temptemp[,(16+k)]), model$coeftable))
+}
+
+
+
+
+
+pretrends <- pretrends[-1,]
+
+rownames(pretrends)
+ordering <- as.numeric(gsub(pattern = "year.rel::", replacement = "", rownames(pretrends)))
+
+
+
+cbind(ordering, data.frame(pretrends))[order(ordering),] %>% 
+  filter(ordering %in% c(-6:-2)) %>% 
+  filter(Outcome %notin% c("htn.rate","dm.rate","pap.rate","crc.rate","childbmi.rate","adultbmi.rate")) %>% 
+  arrange(`Pr...t..`) %>% 
+  mutate(P.value = as.numeric(`Pr...t..`)) %>% 
+  cbind(c(1:85) / 85 * 0.1) %>% 
+  mutate(Row = row_number()) %>% 
+  ggplot(aes(x = Row, y = P.value)) + geom_point() + 
+  ylab("p-values") + xlab("Significance Rank") + geom_abline(slope = 1/85 * 0.1, intercept = 0, color="red", linetype="dashed", alpha=.5) + theme_minimal() + 
+  geom_abline(slope = 1/85, intercept = 0, color="blue", linetype="dashed", alpha=.5)
+
+
+
+
+
+
+```
+
+
+
 ## Stratified by Baseline Market Density
 
 ```{r}
@@ -1015,6 +1079,81 @@ df.temptemp %>%
 
 df.temptemp %>% 
   filter(Tx == 1 & Closed == 100 & value > 2)
+```
+
+
+
+
+
+## Stratified figure instead of table 
+```{r}
+
+strat.temp <- coeffs.did.strat
+strat.temp[3,] <- strat.temp[3,] / 1000
+strat.temp[23,] <- strat.temp[23,] / 100
+strat.temp[18,] <- strat.temp[18,] / 100
+
+
+
+strat.temp <- (cbind(core.did.estimates.strat[,1], strat.temp[-1,c(1:2)]) %>% 
+  data.frame() %>% 
+  mutate(Estimate = as.numeric(Estimate), 
+         `Std..Error` = as.numeric(Std..Error)) %>% 
+  mutate(LB = Estimate - Std..Error * 1.96, 
+         UB = Estimate + Std..Error * 1.96) %>% 
+  rename(Outcome = V1) %>% 
+  mutate(Class = "First Shock"))[c(1, 2, 3, 4, 11:13, 16:23),c(1,2, 4:6)] %>% 
+  rbind((cbind(core.did.estimates.strat[,1], strat.temp[-1,c(5:6)]) %>% 
+  data.frame() %>% 
+  mutate(Estimate = as.numeric(Estimate), 
+         `Std..Error` = as.numeric(Std..Error)) %>% 
+  mutate(LB = Estimate - Std..Error * 1.96, 
+         UB = Estimate + Std..Error * 1.96) %>% 
+  rename(Outcome = V1) %>% 
+  mutate(Class = "Multiple Shocks"))[c(1, 2, 3, 4, 11:13, 16:23),c(1,2, 4:6)]) 
+
+
+
+
+strat.temp %>% 
+  mutate(Measure = ifelse(Outcome %in% c("Qcomp","Total","Altman","logPatsPerStaff","Staff","Closed"), "Overall Metrics", 
+                          ifelse(Outcome %in% c("Pct.MCD","Pct.None","Complexity","Intensity"), "Patient Mix", "Financials"))) %>% 
+  
+ggplot(aes(y=Outcome, x=Estimate, xmin=LB, xmax=UB)) +
+geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("Effect Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha= 1)+
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(Measure~Class, scales= "free_y", switch = 'y', space = "free_y") +
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines"))
+
+
+#core.did.estimates.strat[,1] <- c("Composite Quality of Care, %","Total Patients, No.","Financial Resilience","Operational Efficiency","Clinical Complexity","Intensity","Medicaid, %","Uninsured, %","Cost Per Patient")
+
+
+
 
 ```
 
@@ -1393,6 +1532,25 @@ asdf[1] / asdf[2]
 
 ```
 
+
+
+## Sites and Zips per clinic
+```{r}
+
+df.z.temp %>% 
+  filter(Year == 2012) %>% 
+  mutate(Treat = ifelse(Att > 0, 1, 0)) %>% 
+  group_by(`BHCMIS ID`) %>% #, Treat
+  filter(Sites > 0) %>% 
+  summarise(Zips = n(), Sites = sum(Sites, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  #group_by(Treat) %>% 
+  summarise(mean(Zips), mean(Sites))
+
+
+  
+
+```
 
 
 
