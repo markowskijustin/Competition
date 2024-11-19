@@ -1110,14 +1110,17 @@ strat.temp <- (cbind(core.did.estimates.strat[,1], strat.temp[-1,c(1:2)]) %>%
   mutate(LB = Estimate - Std..Error * 1.96, 
          UB = Estimate + Std..Error * 1.96) %>% 
   rename(Outcome = V1) %>% 
-  mutate(Class = "Multiple Shocks"))[c(1, 2, 3, 4, 11:13, 16:23),c(1,2, 4:6)]) 
-
-
-
-
-strat.temp %>% 
+  mutate(Class = "Multiple Shocks"))[c(1, 2, 3, 4, 11:13, 16:23),c(1,2, 4:6)]) %>% 
   mutate(Measure = ifelse(Outcome %in% c("Qcomp","Total","Altman","logPatsPerStaff","Staff","Closed"), "Overall Metrics", 
-                          ifelse(Outcome %in% c("Pct.MCD","Pct.None","Complexity","Intensity"), "Patient Mix", "Financials"))) %>% 
+                          ifelse(Outcome %in% c("Pct.MCD","Pct.None","Complexity","Intensity"), "Patient Mix", "Financials")))
+
+
+
+strat.temp$Outcome <- rep(c("Composite Quality of Care, %", "Total Patients Served, No.","Financial resilience,\nAltman’s Z Score", "Patient-to-Staff Ratio","Average prevalence of\nselect chronic conditions, %","Intensity", "Medicaid, %","Uninsured, %","CostPerPat","Quick Ratio, %","Months of Cash Available", "Revenue-to-Expenses, Ratio %","Liabilities-to-Assets, Ratio %","Staff, No.","Closure, Acquisition or\nloss of FQHC status, %"), 2)
+
+
+p <- strat.temp  %>% 
+  filter(Outcome %notin% c("Intensity","CostPerPat")) %>% 
   
 ggplot(aes(y=Outcome, x=Estimate, xmin=LB, xmax=UB)) +
 geom_point() + 
@@ -1135,7 +1138,7 @@ geom_errorbarh(height=.1) +
 #scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
 
 #adding a vertical line at the effect = 0 mark
-geom_vline(xintercept=0, color="black", linetype="dashed", alpha= 1)+
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha= 1) +
 
 #faceting based on my subgroups
   #facet_wrap(~X1) +
@@ -1150,7 +1153,12 @@ theme_tufte_revised()+
 theme(panel.spacing = unit(1, "lines"))
 
 
-#core.did.estimates.strat[,1] <- c("Composite Quality of Care, %","Total Patients, No.","Financial Resilience","Operational Efficiency","Clinical Complexity","Intensity","Medicaid, %","Uninsured, %","Cost Per Patient")
+
+
+p + theme(panel.spacing = unit(1, "lines"),  strip.text = element_text(face = "bold", size = 12))
+
+
+
 
 
 
