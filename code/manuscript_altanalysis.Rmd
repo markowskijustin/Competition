@@ -777,20 +777,7 @@ core.iv.estimates %>%
   geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("FirstStage: ") + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
 
   
-  
-  
-  outlier.vals <- quantile(df.temptemp$Altman, p = c(0.01, 0.99), na.rm = TRUE)
-   event_study(data = df.temptemp %>% mutate(ifelse(Att == 2009, 0, Att)) %>% mutate(Altman = ifelse(Altman <= outlier.vals[1], outlier.vals[1], 
-                            ifelse(Altman >= outlier.vals[2], outlier.vals[2], Altman))),
-  yname = "Altman", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
-  filter(abs(term) <= 7) %>%
-  filter(estimator == "Gardner (2021)") %>%
-  #filter(estimator != "Callaway and Sant'Anna (2020)") %>%
-  ggplot(aes(x = term, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
-  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
-  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + ggtitle("Outcomes") + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
-   
+
 
 ```
 
@@ -909,6 +896,63 @@ df.temptemp %>%
 
 
 ```
+
+
+
+## Final DID Event Studies and Alt Estimate Models (Sun-Abraham, TWFE)
+
+
+```{r}
+  
+  
+es.data <- data.frame(estimator = 0, term = 0, estimate = 0, std.error = 0, Measure = 0)
+
+for (k in 1:23){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) #%>% filter(Att %notin% c(2011))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  
+  model <-  event_study(data = df.temptemptemp,
+  yname = "Outcome", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
+  filter(abs(term) <= 7) 
+  
+
+  es.data <- rbind(es.data, data.frame(model, Measure = colnames(df.temptemp)[(16+k)]))
+  
+
+}
+
+
+   
+ess <- es.data[-1,] %>% 
+  
+  #filter(estimator %notin% c("Callaway and Sant'Anna (2020)","Roth and Sant'Anna (2021)")) %>% 
+  filter(estimator == "Gardner (2021)") %>% 
+  
+  filter(Measure %in% c('Total','Staff','Altman','Pct.MCD','Pct.None','Complexity')) %>% 
+  mutate(Group = ifelse(Measure %in% c('Total','Staff','logPatsPerStaff','Qcomp'), "Operational Metrics", 
+                        ifelse(Measure %in% c('Altman','LiabPctAssets','months_of_cash'), 'Financial Metrics', 'Selection Metrics'))) %>% 
+  rename(Year = term) %>% 
+  ggplot(aes(x = Year, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
+  #facet_wrap(~V1, scales = "free_y", ncol = 3) +
+  theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + 
+  facet_wrap(Group~Measure, scales = "free_y", ncol = 2)
+  
+  
+ess + theme(legend.position="none")
+ess + theme(legend.position="bottom")
+
+
+```
+
+
 
 
 ## Benjamini Hochberg
@@ -1068,7 +1112,7 @@ df.temptemp %>%
   filter(!is.na(value) & value_min > 1) %>% 
   group_by(Post, Treat) %>% 
   select(Closed) %>% 
-  summarise(mean.nas, n())
+  summarise(mean.nas(Closed), n())
 
 df.temptemp %>% 
   mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
@@ -1348,7 +1392,7 @@ df.temptemp %>%
   filter(Closed == 100 & !is.na(Tx)) %>% 
   select(ModernGranteeID, `BHCMIS ID`, Year)
   
-H80CS00003
+#H80CS00003
 ```
 
 
@@ -1519,6 +1563,122 @@ did2s(
     )
 
 ```
+
+
+
+
+
+## Comparing Rivals with Incumbents
+```{r}
+  df.z.dist %>% left_join(df.comp, by = c("BHCMIS ID.y" = "BHCMISID", "Year")) %>% 
+      mutate(Type = "Incumbent") %>% 
+      rbind(df.z.dist %>% left_join(df.comp, by = c("BHCMIS ID.x" = "BHCMISID", "Year")) %>% mutate(Type = "Rival")) %>% 
+        mutate(Quality = (dm.rate + htn.rate + crc.rate + pap.rate + childbmi.rate + adultbmi.rate ) / 6 * 100) %>% 
+      mutate(quick_ratio = as.numeric(quick_ratio),
+             Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_net_gain_loss / Assets, #Assets, 
+               Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities) %>% 
+      mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity), 
+         Profitability = ifelse(is.infinite(Profitability), NA, Profitability), 
+         Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency), 
+         NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth), 
+         #Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
+         Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>% 
+      select(Type, Quality, Total, Altman, Pct.NHA:Pct.COM) %>% 
+          tbl_summary(by = Type, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
+  add_p()
+
+
+
+  df.z.dist %>% left_join(df.comp, by = c("BHCMIS ID.y" = "BHCMISID", "Year")) %>% 
+      mutate(Type = "Incumbent") %>% 
+    group_by(`BHCMIS ID.y`)
+  
+  length(unique(df.z.temp2$`BHCMIS ID`))
+  
+  
+```
+
+
+## Stratified Figure
+
+```{r}
+coeffs.strat <- coeffs
+coeffs.strat[2,] <- coeffs.strat[2,] / 100
+
+strat.zip.temp <- data.frame(cbind(colnames(df.z.temp)[1:9], (coeffs.strat[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  mutate(Estimate.1 = round(as.numeric(Estimate.1), 2), `95% CI.1` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(`Std..Error.1`), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(`Std..Error.1`), 2), sep = "")) %>% 
+  filter(V1 != "ZipHHI") %>% 
+   mutate(LB = Estimate - as.numeric(Std..Error) * 1.96, 
+         UB = Estimate + as.numeric(Std..Error) * 1.96) %>% 
+  select(V1, Estimate, LB, UB) %>% 
+    mutate(Class = "Directly Competitive")%>% 
+  rbind(data.frame(cbind(colnames(df.z.temp)[1:9], (coeffs.strat[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  mutate(Estimate.1 = round(as.numeric(Estimate.1), 2), `95% CI.1` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(`Std..Error.1`), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(`Std..Error.1`), 2), sep = "")) %>% 
+  filter(V1 != "ZipHHI") %>% 
+   mutate(LB = Estimate.1 - as.numeric(Std..Error.1) * 1.96, 
+          UB = Estimate.1 + as.numeric(Std..Error.1) * 1.96) %>% 
+    select(V1, Estimate.1, LB, UB) %>% 
+    rename(Estimate = Estimate.1) %>% 
+    mutate(Class = "Indirectly Competitive")) %>% 
+  rename(Outcome = V1) %>% 
+  filter(Outcome != "Total.Hours") %>% 
+  mutate(Measure = ifelse(Outcome %in% c("Sites","Mean.Hours"), "Access to Care", "Patients and Payer Mix"))
+
+
+
+strat.zip.temp$Outcome <- as.factor(strat.zip.temp$Outcome)
+
+
+p <- strat.zip.temp  %>% 
+  filter(Outcome %notin% c("Intensity","CostPerPat")) %>% 
+  
+ggplot(aes(y=Outcome, x=Estimate, xmin=LB, xmax=UB)) +
+geom_point() + 
+
+#this changes the features of the overall effects
+#one could resize, reshape, or recolor these points if desired
+xlab("Effect Estimates") + 
+ylab(NULL) + 
+#adds the CIs
+geom_errorbarh(height=.1) +
+
+#sets the scales
+#note that I reverse the y axis to correctly order the effect #sizes based on my index variable
+#scale_x_continuous(limits=c(-2.5,1), breaks = c(-2.5:1), name=xname)+
+#scale_y_continuous(name = "", breaks=1:9, labels = t9.forest$X1, trans="reverse")+
+
+#adding a vertical line at the effect = 0 mark
+geom_vline(xintercept=0, color="black", linetype="dashed", alpha= 1) +
+
+#faceting based on my subgroups
+  #facet_wrap(~X1) +
+facet_grid(Measure~Class, scales= "free_y", switch = 'y', space = "free_y") +
+ 
+
+#thematic stuff
+#ggtitle("Figure 3 - ATT Estimates by SubGroups")+
+theme_tufte_revised()+
+   theme(strip.placement = "outside") +
+#theme(text=element_text(family="Times",size=12, color="black"))+
+theme(panel.spacing = unit(1, "lines"))
+
+
+
+
+p + theme(panel.spacing = unit(1, "lines"),  strip.text = element_text(face = "bold", size = 12))
+
+
+
+```
+
+
 ## Back of the envelop
 
 ```{r}
@@ -1568,7 +1728,7 @@ df.z.temp %>%
 
 es.direct <- did2s(
   data = df.z.temp %>% filter(Year >= 2012)   %>% mutate(rel_year = ifelse(Att == 0, Inf, Year - Att)) %>% filter(Att == 0 | DirectlyTreated == 1), 
-  yname = "Sites", 
+  yname = "Pct.None", 
   treatment = "Tx",
   first_stage = ~ 0 | ID + Year, 
     second_stage = ~ i(rel_year, ref = c(-7, Inf)) ,
@@ -1577,7 +1737,7 @@ es.direct <- did2s(
 
 es.indirect <- did2s(
   data = df.z.temp%>% filter(Year >= 2012)   %>% mutate(rel_year = ifelse(Att == 0, Inf, Year - Att)) %>% filter(Att == 0 | DirectlyTreated == 0), 
-  yname = "Sites", 
+  yname = "Pct.None", 
   treatment = "Tx",
   first_stage = ~ 0 | ID + Year, 
     second_stage = ~ i(rel_year, ref = c(-7, Inf)) ,
@@ -1585,8 +1745,8 @@ es.indirect <- did2s(
   verbose = FALSE)
 
 
-cbind(YearRel = c(gsub("rel_year::", "", rownames(es.direct$coeftable)), gsub("rel_year::", "", rownames(es.indirect$coeftable))), 
-      rbind(cbind(Group = "Direct",es.direct$coeftable), cbind(Group = "Indirect",es.indirect$coeftable))) %>% 
+es.zips.none <- cbind(YearRel = c(gsub("rel_year::", "", rownames(es.direct$coeftable)), gsub("rel_year::", "", rownames(es.indirect$coeftable))), 
+      rbind(cbind(Group = "Directly",es.direct$coeftable), cbind(Group = "Indirectly",es.indirect$coeftable))) %>% 
   data.frame() %>% 
   mutate(estimate = as.numeric(Estimate), 
          std.error = as.numeric(Std..Error), 
@@ -1595,8 +1755,11 @@ cbind(YearRel = c(gsub("rel_year::", "", rownames(es.direct$coeftable)), gsub("r
  ggplot(aes(x = YearRel, y = estimate, color = Group)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
   theme_tufte_revised() + geom_vline(xintercept=-0.5, color="blue", linetype="dashed", alpha=.6)+ #theme(legend.position = "none", plot.title = element_text(size=18, face='bold')) +
-  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points")
+  geom_hline(yintercept=0, color="black", linetype="dashed", alpha=.5) + xlab("Year Relative to Competitive Shock") + ylab("Percentage Points") + ggtitle("Uninsured, %")
 
+
+
+ggarrange(es.zips.hours, es.zips.sites, es.zips.mcd, es.zips.none, nrow = 2, ncol = 2, common.legend = TRUE)
 
 ```
 
