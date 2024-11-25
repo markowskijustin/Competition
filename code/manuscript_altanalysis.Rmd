@@ -1111,8 +1111,8 @@ df.temptemp %>%
   mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
   filter(!is.na(value) & value_min > 1) %>% 
   group_by(Post, Treat) %>% 
-  select(Closed) %>% 
-  summarise(mean.nas(Closed), n())
+  select(Closed, Complexity) %>% 
+  summarise(mean.nas(Closed), n(), mean.nas(Complexity))
 
 df.temptemp %>% 
   mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
@@ -1134,9 +1134,23 @@ df.temptemp %>%
 
 strat.temp <- coeffs.did.strat
 strat.temp[3,] <- strat.temp[3,] / 1000
-strat.temp[23,] <- strat.temp[23,] / 100
+strat.temp[23,] <- strat.temp[23,] / 10
 strat.temp[18,] <- strat.temp[18,] / 100
 
+#strat.temp[12,] <- strat.temp[12,] / 5.5 * 100
+
+strat.temp <- coeffs.did.strat
+
+strat.temp <- (strat.temp/(df.temptemp %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
+  filter(!is.na(value) & value_min > 1) %>% 
+  group_by(Post, Treat) %>% 
+  select(Qcomp:Closed) %>% 
+  summarise_all(mean.nas) %>% 
+  filter(Post == 0 & Treat == "Treated") %>% 
+  t())[-c(2)] %>% 
+  as.numeric() * 100)[-24,] %>% 
+  rbind(coeffs.did.strat[24,])
 
 
 strat.temp <- (cbind(core.did.estimates.strat[,1], strat.temp[-1,c(1:2)]) %>% 
@@ -1160,18 +1174,18 @@ strat.temp <- (cbind(core.did.estimates.strat[,1], strat.temp[-1,c(1:2)]) %>%
 
 
 
-strat.temp$Outcome <- rep(c("Composite Quality of Care, %", "Total Patients Served, No.","Financial resilience,\nAltman’s Z Score", "Patient-to-Staff Ratio","Average prevalence of\nselect chronic conditions, %","Intensity", "Medicaid, %","Uninsured, %","CostPerPat","Quick Ratio, %","Months of Cash Available", "Revenue-to-Expenses, Ratio %","Liabilities-to-Assets, Ratio %","Staff, No.","Closure, Acquisition or\nloss of FQHC status, %"), 2)
+strat.temp$Outcome <- rep(c("Composite Quality of Care", "Total Patients Served","Financial resilience,\nAltman’s Z Score", "Patient-to-Staff Ratio","Average prevalence of\nselect chronic conditions","Intensity", "Medicaid","Uninsured","CostPerPat","Quick Ratio","Months of Cash Available", "Revenue-to-Expenses","Liabilities-to-Assets","Staff","Closure, Acquisition or\nloss of FQHC status"), 2)
 
 
 p <- strat.temp  %>% 
-  filter(Outcome %notin% c("Intensity","CostPerPat")) %>% 
+  filter(Outcome %notin% c("Intensity","CostPerPat","Months of Cash Available")) %>% 
   
 ggplot(aes(y=Outcome, x=Estimate, xmin=LB, xmax=UB)) +
 geom_point() + 
 
 #this changes the features of the overall effects
 #one could resize, reshape, or recolor these points if desired
-xlab("Effect Estimates") + 
+xlab("Effect Estimates (% change)") + 
 ylab(NULL) + 
 #adds the CIs
 geom_errorbarh(height=.1) +
@@ -1202,6 +1216,8 @@ theme(panel.spacing = unit(1, "lines"))
 p + theme(panel.spacing = unit(1, "lines"),  strip.text = element_text(face = "bold", size = 12))
 
 
+
+colnames(df.temptemp)[17:39]
 
 
 
