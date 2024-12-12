@@ -647,6 +647,7 @@ p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zi
 p.desc
 
 
+
 ```
 
 
@@ -698,6 +699,7 @@ core.iv.estimates %>%
   kable_styling(latex_options = c("striped")) %>%
   pack_rows(index = c("Overall Impacts" = 4, "Quality of Care" = 6, "Patient Complexity" = 2, "Payer Mix" = 4, "Finances" = 6)) %>% 
   add_header_above(c("IV-Estimated LATE Effects of Competitive Shocks on Incumbent Clinics" = 3))
+
 
 
 
