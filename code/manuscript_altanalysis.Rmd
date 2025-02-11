@@ -901,6 +901,8 @@ df.temptemp %>%
 
 
 
+
+
 ## Final DID Event Studies and Alt Estimate Models (Sun-Abraham, TWFE)
 
 
@@ -1229,8 +1231,53 @@ colnames(df.temptemp)[17:39]
 
 
 
-## Compared to pre-2020 estimates
+## Compared to pre-2020 estimates and Controlling for ACA
 ```{r}
+
+
+
+
+coeffs.did.ACA <- c(0,0,0,0)
+
+for (k in 1:23){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) #%>% filter(Att %notin% c(2011))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  model <-  did2s(
+      data = df.temptemptemp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag + ACA | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs.did.ACA <- rbind(coeffs.did.ACA, model$coeftable[1,])
+  
+
+}
+
+
+core.did.estimates.ACA <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.ACA[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Pr...t..)
+
+core.did.estimates.ACA <- core.did.estimates.ACA
+#rownames(core.did.estimates) <- NULL
+
+
+
+
+
 
 
 coeffs.did.pre2020 <- c(0,0,0,0)
@@ -1272,7 +1319,7 @@ rownames(core.did.estimates) <- NULL
 
 
 
-cbind(core.did.estimates, core.did.estimates.pre2020)
+cbind(core.did.estimates[,c(1,2,4)], core.did.estimates.pre2020[,c(2,4)], core.did.estimates.ACA[,c(2,4)])
 
 
 ```
