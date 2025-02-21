@@ -77,7 +77,7 @@ clinics.in.zips <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
 included.years <- 2009:2023
 included.treat <- 2011:2023
 
-
+length(unique(uds.covariates$BHCMISID))
 
 df.comp <- uds.covariates %>% 
   select(Year:BHCMISID, Total:Pct.COM) %>% 
@@ -145,7 +145,19 @@ df.comp <- df.comp %>%
          Hypertension.care = T6A_L11_CA / T6A_L11_CB) %>%  #%>%  filter(STATE != 'CT')
 select(BHCMISID:Year, Total:Pct.COM, HIV.prev:Hypertension.care , imm.rate:MinYear)
 
+length(unique(df.comp[df.comp$Year %in% included.years,]$BHCMISID))
 
+
+df.comp %>% 
+    filter(Year == 2022) %>% 
+    mutate(Missing = ifelse(is.na(ngla_net_gain_loss), "Missing", "Have")) %>% 
+    ungroup() %>% 
+    select(Missing, Total, Pct.NHA:Pct.COM) %>% 
+    #filter(!complete.cases(.)) %>% 
+    tbl_summary(by = Missing, 
+                  statistic = list(all_continuous() ~ "{mean} ({sd})"),
+  missing = "no", digits = list(everything() ~ c(2))) %>% 
+    add_p(pvalue_fun = function(x) style_pvalue(x, digits = 3)) 
 
 ```
 
@@ -247,14 +259,17 @@ dfc <- dfc %>%
          Distress = ifelse(Altman < 2.6, 1, 0))
 
 
-table(table(dfc$`BHCMIS ID`))
+# table(table(dfc$`BHCMIS ID`))
+# 
+# 
+# 
+# dfc %>% filter(ID.x == "90")
+# 
+# dfc %>% 
+#   filter(`BHCMIS ID` == "012070")
 
 
-
-dfc %>% filter(ID.x == "90")
-
-dfc %>% 
-  filter(`BHCMIS ID` == "012070")
+length(unique(dfc$`BHCMIS ID`))
 
 ```
 
@@ -329,12 +344,15 @@ df.mt[df.mt$Year >= 2010,]$Intensity <- df.mt[df.mt$Year >= 2010,] %>%
   select(HIV.care, Depression.care, HeartDisease.care, Diabetes.care, Hypertension.care) %>% 
   rowMeans(na.rm = TRUE)
   
-
+length(unique(dfc$`BHCMIS ID`))
 
 ```
 
 ## More Cleaning
 ```{r}
+
+length(unique(df.mt$`BHCMIS ID`))
+
 
 df.temptemp <- df.mt %>% 
     rename(ID = ID.x) %>% 
@@ -356,7 +374,7 @@ df.temptemp <- df.temptemp %>%
   mutate(value = ifelse(value >= 6, 6, value)) #%>% group_by(ID) %>% mutate(max_Closures = max(Closed)) %>% filter(max_Closures == 0) 
 
 
-
+length(unique(df.temptemp$`BHCMIS ID`))
 
 df.temptemp <- df.temptemp %>% 
   left_join (df.temptemp %>% 
@@ -392,7 +410,7 @@ df.temptemp <- df.temptemp %>%
   filter(`n()` != length(included.years)), by = c("ID")) %>% 
   filter(is.na(`n()`))
 
-
+length(unique(df.temptemp$`BHCMIS ID`))
 
 possible.vecs <- rep(included.treat, df.temptemp %>% 
   filter(Tx == 1 & Year > 2010) %>% 
@@ -426,7 +444,7 @@ df.temptemp <- df.temptemp %>%
   filter(!(Treat == "Control" & Att == 2009))
 
 
-
+length(unique(df.temptemp$`BHCMIS ID`))
 
 ```
 
@@ -518,7 +536,182 @@ df.temptemp %>%
   arrange(desc(Change))
 
 
+summary(df.temptemp[df.temptemp$Year == 2022 & df.temptemp$Closed == 0,])
 
+df.temptemp[df.temptemp$Closed == 0,]
+
+
+# 
+# fullfins <- ufins2 %>%
+#   mutate(months_of_cash = as.numeric(months_of_cash),
+#                ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
+#                quick_ratio = as.numeric(quick_ratio),
+#                Liquidity = (Assets - Liabilities) / Assets,
+#                Profitability = ngla_revenue / ngla_expense * 100, #Assets,
+#                Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+#                NetWorth = (Assets - Liabilities) / Liabilities,
+#             Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense,
+#             LiabPctAssets = Liabilities / Assets * 100,
+#             Eff = ngla_prog_serv_revenue / Assets,
+#             LiabPctRev = ngla_prog_serv_revenue / ngla_expense) %>%
+#   mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity),
+#          Profitability = ifelse(is.infinite(Profitability), NA, Profitability),
+#          Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency),
+#          NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth),
+#          Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>%
+#   select(BHCMIS.ID, form_year, Altman, quick_ratio, months_of_cash, Profitability, LiabPctAssets, Staff, ngla_net_gain_loss )
+# 
+# 
+# 
+# 
+# df.temptemp <- df.temptemp %>%
+#   left_join(fullfins %>% unique(), by = c("BHCMIS ID" = "BHCMIS.ID","Year" = "form_year")) %>%
+#   unique() %>%
+#   mutate(Altman.x = ifelse(is.na(Altman.x), Altman.y, Altman.x),
+#          quick_ratio.x = ifelse(is.na(quick_ratio.x), quick_ratio.y, quick_ratio.x),
+#          months_of_cash.x = ifelse(is.na(months_of_cash.x), months_of_cash.y, months_of_cash.x),
+#          Profitability.x = ifelse(is.na(Profitability.x), Profitability.y, Profitability.x),
+#          LiabPctAssets.x = ifelse(is.na(LiabPctAssets.x), LiabPctAssets.y, LiabPctAssets.x),
+#          Staff.x = ifelse(is.na(Staff.x), Staff.y, Staff.x),
+#          ngla_net_gain_loss.x = ifelse(is.na(ngla_net_gain_loss.x), ngla_net_gain_loss.y, ngla_net_gain_loss.x)) %>%
+#   rename(Altman = Altman.x,
+#          quick_ratio = quick_ratio.x,
+#          months_of_cash = months_of_cash.x,
+#          Profitability = Profitability.x,
+#          LiabPctAssets = LiabPctAssets.x,
+#          Staff = Staff.x,
+#          ngla_net_gain_loss = ngla_net_gain_loss.x) %>%
+#   unique()
+
+
+
+
+
+df.temptemp %>% 
+  filter(Year == 2022) %>% 
+  mutate(Missing = ifelse(is.na(Qcomp), "Missing", "Have")) %>% 
+  select(Missing, Total, Pct.NHA:Staff) %>% 
+  #filter(!complete.cases(.)) %>% 
+  tbl_summary(by = Missing, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"),
+missing = "no", digits = list(everything() ~ c(2))) %>% 
+  add_p(pvalue_fun = function(x) style_pvalue(x, digits = 3)) 
+
+
+
+
+df.temptemp %>% 
+  filter(Year == 2022) %>% 
+  mutate(Missing = ifelse(is.na(Altman), "Missing", "Have")) %>% 
+  select(Missing, Total, Pct.NHA:Staff) %>% 
+  #filter(!complete.cases(.)) %>% 
+  tbl_summary(by = Missing, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"),
+missing = "no", digits = list(everything() ~ c(2))) %>% 
+  add_p(pvalue_fun = function(x) style_pvalue(x, digits = 3)) 
+
+
+```
+
+
+## Balance by 990 vs non990 data CHCs
+```{r}
+
+
+df.temptemp %>% 
+  filter(Year == 2010) %>% 
+  mutate(Missing = ifelse(is.na(Altman), "Missing", "Have")) %>% 
+  select(Missing, Total, Pct.NHA:Staff) %>% 
+  #filter(!complete.cases(.)) %>% 
+  tbl_summary(by = Missing, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"),
+missing = "no", digits = list(everything() ~ c(2))) %>% 
+  add_p(pvalue_fun = function(x) style_pvalue(x, digits = 3)) 
+
+
+
+
+fullfins <- ufins2 %>%
+  mutate(months_of_cash = as.numeric(months_of_cash),
+               ngla_prog_serv_revenue = as.numeric(ngla_prog_serv_revenue),
+               quick_ratio = as.numeric(quick_ratio),
+               Liquidity = (Assets - Liabilities) / Assets,
+               Profitability = ngla_revenue / ngla_expense * 100, #Assets,
+               Efficiency = ngla_revenue / Assets, #ngla_revenue / Assets,
+               NetWorth = (Assets - Liabilities) / Liabilities,
+            Pexpenses = ngla_prog_serv_revenue / ngla_prog_expense,
+            LiabPctAssets = Liabilities / Assets * 100,
+            Eff = ngla_prog_serv_revenue / Assets,
+            LiabPctRev = ngla_prog_serv_revenue / ngla_expense) %>%
+  mutate(Liquidity = ifelse(is.infinite(Liquidity), NA, Liquidity),
+         Profitability = ifelse(is.infinite(Profitability), NA, Profitability),
+         Efficiency = ifelse(is.infinite(Efficiency), NA, Efficiency),
+         NetWorth = ifelse(is.infinite(NetWorth), NA, NetWorth),
+         Altman = (0.0656 * Liquidity + 0.0326 * quick_ratio + 0.0672 * Efficiency + 0.0105 * NetWorth) * 10) %>%
+  select(BHCMIS.ID, form_year, Altman, quick_ratio, months_of_cash, Profitability, LiabPctAssets, Staff, ngla_net_gain_loss )
+
+
+
+df.temptemp <- df.temptemp %>%
+  left_join(fullfins %>% unique() %>%
+  filter(!(`BHCMIS.ID` == "03E00494" & form_year == 2010) & 
+           !(`BHCMIS.ID` == "03E01039" & form_year ==	2015)& 
+           !(`BHCMIS.ID` == "05E00445" & form_year ==	2015)& 
+           !(`BHCMIS.ID` == "05E00499" & form_year ==	2013)& 
+           
+           !(`BHCMIS.ID` == "06E00500" & form_year ==	2016)& 
+           !(`BHCMIS.ID` == "07E00486" & form_year ==	2014)& 
+           !(`BHCMIS.ID` == "07E00514" & form_year ==	2014)& 
+           !(`BHCMIS.ID` == "10E00136" & form_year ==	2013)), by = c("BHCMIS ID" = "BHCMIS.ID","Year" = "form_year"))  %>% 
+  unique() %>%
+  mutate(Altman.x = ifelse(is.na(Altman.x), Altman.y, Altman.x),
+         quick_ratio.x = ifelse(is.na(quick_ratio.x), quick_ratio.y, quick_ratio.x),
+         months_of_cash.x = ifelse(is.na(months_of_cash.x), months_of_cash.y, months_of_cash.x),
+         Profitability.x = ifelse(is.na(Profitability.x), Profitability.y, Profitability.x),
+         LiabPctAssets.x = ifelse(is.na(LiabPctAssets.x), LiabPctAssets.y, LiabPctAssets.x),
+         Staff.x = ifelse(is.na(Staff.x), Staff.y, Staff.x),
+         ngla_net_gain_loss.x = ifelse(is.na(ngla_net_gain_loss.x), ngla_net_gain_loss.y, ngla_net_gain_loss.x)) %>%
+  rename(Altman = Altman.x,
+         quick_ratio = quick_ratio.x,
+         months_of_cash = months_of_cash.x,
+         Profitability = Profitability.x,
+         LiabPctAssets = LiabPctAssets.x,
+         Staff = Staff.x,
+         ngla_net_gain_loss = ngla_net_gain_loss.x) %>%
+  unique()
+
+
+df.temptemp %>% 
+  filter(Year == 2010) %>% 
+  select(Altman, Pct.NHA:Pct.Homeless, Pct.MCD:Pct.None) %>% 
+  mutate(Missing = ifelse(is.na(Altman), "Missing", "Have")) %>% 
+  #filter(!complete.cases(.)) %>% 
+  tbl_summary(by = Missing, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"),
+missing = "no", digits = list(everything() ~ c(2))) %>% 
+  add_p(pvalue_fun = function(x) style_pvalue(x, digits = 3)) 
+
+# 
+# fullfins %>% 
+#     filter(`BHCMIS.ID` %in% names(table(df.temptemp$`BHCMIS ID`)[table(df.temptemp$`BHCMIS ID`) != 15]))
+# 
+# df.temptemp %>% 
+#   filter(`BHCMIS ID` %in% names(table(df.temptemp$`BHCMIS ID`)[table(df.temptemp$`BHCMIS ID`) != 15]))
+
+```
+
+
+
+
+```{r}
+uds.6b.2022 %>% 
+  filter(BHCMISID == "01E01088")
+
+uds.quality.6b %>% 
+  filter(BHCMISID == "01E01088")
+
+df.temptemp %>% 
+  filter(`BHCMIS ID` == "01E01088")
 ```
 
 
@@ -595,9 +788,9 @@ p.desc
 
 plot0 <- p %>% 
   arrange(CompetitorsInArea) %>% 
-  ggplot(aes(x = Year, y = Count, group = CompetitorsInArea, linetype = CompetitorsInArea)) + ylab("FQHCs") + 
+  ggplot(aes(x = Year, y = Count, group = CompetitorsInArea, linetype = CompetitorsInArea)) + ylab("CHCs") + 
   #geom_point(size = 1.1) + 
-  geom_line(size = 1.1) + theme_tufte_revised() + ggtitle("FQHCs by Number of Colocated FQHCs") + 
+  geom_line(size = 1.1)  + theme_tufte_revised() + ggtitle("CHCs by Number of Colocated CHCs") + 
   #geom_dl(label=c(rep("0 Rivals", length(unique(p$Year))), rep("1 Rival", length(unique(p$Year))), rep("2 Rivals", length(unique(p$Year))), rep("3+ Rivals", length(unique(p$Year)))), 
    #       method = list("last.points", hjust = 1, vjust = c(-3, 2, 2.5, -1), cex = 1.5), inherit.aes=T ) + 
   #guides(linetype = "none") + 
@@ -617,21 +810,21 @@ plot1 <- uds.sites.full[!is.na(uds.sites.full$Zip),] %>%
   group_by(Counts.f, Year) %>% 
   summarise(Zips = sum(Zips)) %>% 
   #filter(Year >= 2010) %>% 
-  ggplot(aes(x = Year, y = Zips, group = Counts.f, linetype = Counts.f)) + 
+  ggplot(aes(x = Year, y = Zips)) + 
   #geom_point(size = 1.1) + 
-  geom_line(size = 1.1) + theme_tufte_revised() + 
-  ggtitle("Zip Codes by Number of FQHC Sites") + 
+  geom_line(size = 1.1, aes(linetype = Counts.f)) + theme_tufte_revised() +
+  ggtitle("Zip Codes by Number of CHC Sites") + 
   #geom_dl(label=c(rep("1 Site", length(unique(p$Year))), rep("2+ Sites", length(unique(p$Year)))), method = list("last.points", hjust = 1, vjust = -1, cex = 1.5), inherit.aes=T ) + 
   #guides(linetype = "none") + 
   ylim(0, 4000) +theme(axis.text=element_text(size=12),
         axis.title=element_text(size=12,face="bold")) + 
-  scale_linetype_manual(values=c(5, 6)) + 
+  scale_linetype_manual(values=c(7, 8)) + 
   guides(linetype = guide_legend(title = "# CHC Sites by\nZip Code"))
 
 
 p.desc <- ggarrange(plot1, plot0, ncol = 1) 
 
-p.desc <- annotate_figure(p.desc, top = text_grob("FQHC Growth and Density by Zip and Clinic, UDS 1996 to 2023", face = "bold", size = 14))
+p.desc <- annotate_figure(p.desc, top = text_grob("CHC Growth and Density by Zip and Clinic, UDS 1996 to 2023", face = "bold", size = 14))
 
 #ggsave(filename = "Figure1.png", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Figures", plot = p.desc, width = 8, height = 11)
 
@@ -678,7 +871,7 @@ for (k in 1:28){
                             ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
   #model <- feols(Outcome ~ Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless   | I((10000 - ClinicHHI)/1000) ~ Tx + factor(Year) + factor(ID) , cluster = "ID", data = df.temptemptemp)
   #coeffs <- rbind(coeffs, model$coeftable[2,])
-  model <- feols(Outcome ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year | I((10000 - ClinicHHI)/1000) ~ Tx*value, cluster = "ID", data = df.temptemptemp)
+  model <- feols(Outcome ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless  | ID + Year | I((10000 - ClinicHHI)/1000) ~ Tx, cluster = "ID", data = df.temptemptemp)
   coeffs <- rbind(coeffs, model$coeftable[1,])
   
 
@@ -724,7 +917,7 @@ core.iv.estimates %>%
 
 
     event_study(data = df.temptemp,
-  yname = "ClinicHHI", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag) %>%
+  yname = "ClinicHHI", idname = "ID", tname = "Year", gname = "Att", estimator = "all", xformla = ~Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless) %>%
   filter(abs(term) <= 6) %>%
   filter(estimator == "Gardner (2021)") %>%
   #filter(estimator == "Callaway and Sant'Anna (2020)") %>%
@@ -807,7 +1000,7 @@ for (k in 1:23){
       data = df.temptemptemp, 
       yname = "Outcome", 
       treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = TRUE
@@ -903,6 +1096,7 @@ df.temptemp %>%
 
 
 
+
 ## Final DID Event Studies and Alt Estimate Models (Sun-Abraham, TWFE)
 
 
@@ -942,6 +1136,12 @@ ess <- es.data[-1,] %>%
   filter(Measure %in% c('Total','Staff','Altman','Pct.MCD','Pct.None','Complexity')) %>% 
   mutate(Group = ifelse(Measure %in% c('Total','Staff','logPatsPerStaff','Qcomp'), "Operational Metrics", 
                         ifelse(Measure %in% c('Altman','LiabPctAssets','months_of_cash'), 'Financial Metrics', 'Selection Metrics'))) %>% 
+  mutate(Measure = ifelse(Measure == "Altman", "Financial resilience, Altman’s Z Score", 
+                   ifelse(Measure == "Staff", "CHC Staff, No.",
+                   ifelse(Measure == "Total", "Total Patients Served, No.", 
+                   ifelse(Measure == "Complexity", "Average prevalence of select chronic conditions, %", 
+                   ifelse(Measure == "Pct.MCD", "Payer Mix - % Medicaid", 
+                   ifelse(Measure == "Pct.None", "Payer Mix - % Uninsured", Measure))))))) %>%
   rename(Year = term) %>% 
   ggplot(aes(x = Year, y = estimate, color = estimator)) + geom_point(position = position_dodge(0.9), size = 3) + geom_errorbar(aes(ymin=estimate-1.96*std.error, ymax=estimate+1.96*std.error), width=.25, position = position_dodge(0.9), size = 0.8)  +
   #facet_wrap(~V1, scales = "free_y", ncol = 3) +
@@ -1058,7 +1258,7 @@ for (k in 1:23){
       data = df.temptemptemp,
       yname = "Outcome",
       treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
         second_stage =~ i(Tx*ifelse(value_min== 1, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min>=2, 1, 0), ref = FALSE),
         #second_stage =~ i(Tx, ref = FALSE) + I(as.numeric(Tx) * as.numeric(value_min)) ,
         cluster_var = "ID",
@@ -1325,6 +1525,165 @@ cbind(core.did.estimates[,c(1,2,4)], core.did.estimates.pre2020[,c(2,4)], core.d
 ```
 
 
+
+
+
+## Evaluating Missingness
+
+```{r}
+
+
+coeffs.did.missingButBaseline <- c(0,0,0,0)
+
+for (k in 1:22){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) %>% select(ClinicHHI:ACA, Treat:year.rel) %>% ungroup() %>% # filter(!is.na(Altman)) 
+    inner_join(df.temptemp %>% filter(Year == 2010) %>% ungroup() %>% mutate(Missing = ifelse(is.na(Altman), "Missing", "Have")) %>% select(`BHCMIS ID`, Missing), by = c("BHCMIS ID")) %>% filter(Missing == "Have") %>% 
+    filter(!complete.cases(.)) 
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  model <-  did2s(
+      data = df.temptemptemp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs.did.missingButBaseline <- rbind(coeffs.did.missingButBaseline, model$coeftable[1,])
+  
+
+}
+
+
+core.did.estimates.missingBugBaseline <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.missingButBaseline[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Pr...t..)
+
+nrow(df.temptemptemp)
+
+
+coeffs.did.notmissing <- c(0,0,0,0)
+
+for (k in 1:22){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) %>% select(ClinicHHI:ACA, Treat:year.rel) %>% ungroup() %>% # filter(!is.na(Altman)) 
+    inner_join(df.temptemp %>% filter(Year == 2010) %>% ungroup() %>% mutate(Missing = ifelse(is.na(Altman), "Missing", "Have")) %>% select(`BHCMIS ID`, Missing), by = c("BHCMIS ID")) %>% filter(Missing == "Have") %>% 
+    filter(complete.cases(.)) 
+    
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  
+ if (sum(is.na(df.temptemptemp$Outcome)) > 2500) {
+   coeffs.did.notmissing <- rbind(coeffs.did.notmissing, c(NA, NA, NA, NA))  
+   
+   
+ } else {
+   model <-  did2s(
+      data = df.temptemptemp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs.did.notmissing <- rbind(coeffs.did.notmissing, model$coeftable[1,])  
+   
+ }
+   
+}
+
+
+core.did.estimates.notmissing <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.notmissing[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Pr...t..)
+
+nrow(df.temptemptemp)
+
+
+
+
+
+coeffs.did.missing <- c(0,0,0,0)
+
+for (k in 1:22){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) %>% select(ClinicHHI:ACA, Treat:year.rel) %>% ungroup() %>% # filter(!is.na(Altman)) 
+    inner_join(df.temptemp %>% filter(Year == 2010) %>% ungroup() %>% mutate(Missing = ifelse(is.na(Altman), "Missing", "Have")) %>% select(`BHCMIS ID`, Missing), by = c("BHCMIS ID")) %>% filter(Missing == "Missing") 
+    
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  
+ if (sum(is.na(df.temptemptemp$Outcome)) > 2500) {
+   coeffs.did.missing <- rbind(coeffs.did.missing, c(NA, NA, NA, NA))  
+   
+   
+ } else {
+   model <-  did2s(
+      data = df.temptemptemp, 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage = ~ i(Tx, ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs.did.missing <- rbind(coeffs.did.missing, model$coeftable[1,])  
+   
+ }
+   
+}
+
+
+core.did.estimates.missing <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.missing[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Pr...t..)
+
+nrow(df.temptemptemp)
+
+
+
+cbind(core.did.estimates.missingBugBaseline[,c(1,2,3, 4)], core.did.estimates.notmissing[,c(2,3, 4)], core.did.estimates.missing[,c(2,3,4)])
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
 ## Event Study
 
 ```{r}
@@ -1546,7 +1905,7 @@ df.z.temp <- df.z %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 20
                Pct.None = Uninsured / NumberofPatients * 100 ) %>% 
   select(NumberofPatients, Pct.MCD:Pct.None, Total.Hours, Sites, Mean.Hours, ZipHHI, Perminance, Schedule, Calendar, Tx, DirectlyTreated, ID, Year, Zip, Att, `BHCMIS ID`, UrbanRuralFlag) %>% 
   ### DATA ERRORS
-  filter(Total.Hours <= 1344.00)
+  filter(Total.Hours <= 1344.00) 
 
  
 coeffs <- c(0,0,0,0, 0, 0, 0, 0)
@@ -1566,7 +1925,17 @@ for (k in 1:9){
   
   
   
-  df.z.temp2 <- df.z.temp %>% filter(Year >= 2012) %>% filter(Att %notin% c(2009:2012))
+  df.z.temp2 <- df.z.temp %>% filter(Year >= 2012) %>% filter(Att %notin% c(2009:2012)) %>% 
+      left_join(census, by = c("Zip" = "ZipCode", "Year" = "YEAR")) %>% 
+  mutate(PctMedicaid = Medicaid / MCD.denom * 100, 
+         PctUninsured = Uninsured / Unins.denom * 100, 
+         PctPoverty = IncomeBelowPoverty / PovertyStatusDet * 100, 
+         PctUnemployed = Unemployed / Unemp_denom * 100, 
+         PctBlack = Black / TotalPop * 100, 
+         PctHispanic = Hispanic / TotalPop * 100, 
+         PctChildren = AgeUnder18 / TotalPop * 100, 
+         PctElderly = Age65andOver / TotalPop * 100, 
+         PctEducLow = EducLow / TotalPop * 100) 
   
   
   colnames(df.z.temp2)[k] <- "Outcome"
@@ -1584,7 +1953,8 @@ for (k in 1:9){
       data = df.z.temp2, 
       yname = "Outcome", 
       treatment = "Tx",
-        first_stage = ~ 1 | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        first_stage = ~ 1 | ID + Year ,
+        #first_stage = ~ TotalPop + PctMedicaid + PctUninsured + PctPoverty + PctBlack + PctHispanic + PctChildren + PctElderly | ID + Year ,
         second_stage = ~ i(Tx * (1 - DirectlyTreated), ref = FALSE)  + I(Tx * DirectlyTreated),
       #second_stage = ~ i(Tx , ref = FALSE)  + I(Tx * DirectlyTreated),
         cluster_var = "ID",
@@ -1626,6 +1996,7 @@ did2s(
         cluster_var = "ID",
       verbose = TRUE
     )
+
 
 ```
 
@@ -1834,12 +2205,13 @@ ggarrange(es.zips.hours, es.zips.sites, es.zips.mcd, es.zips.none, nrow = 2, nco
 ## Are the closer and farther areas different?
 ```{r}
 
+
 df.z.temp %>% 
   #select(Zip, Year, DirectlyTreated, Att) %>% 
   mutate(Status = ifelse(Att == 0, NA, 
                          ifelse(Att > 0 & DirectlyTreated == 0, "IndirectlyTreated","DirectlyTreated"))) %>% 
   inner_join(census, by = c("Zip" = "ZipCode", "Year" = "YEAR")) %>% 
-  filter(Year == 2012) %>% 
+  filter(Year %in% c(2012)) %>% 
   mutate(PctMedicaid = Medicaid / MCD.denom * 100, 
          PctUninsured = Uninsured / Unins.denom * 100, 
          PctPoverty = IncomeBelowPoverty / PovertyStatusDet * 100, 
@@ -1849,10 +2221,43 @@ df.z.temp %>%
          PctChildren = AgeUnder18 / TotalPop * 100, 
          PctElderly = Age65andOver / TotalPop * 100, 
          PctEducLow = EducLow / TotalPop * 100) %>% 
-    select(Status, TotalPop, PctMedicaid:PctEducLow, UrbanRuralFlag) %>% 
-    tbl_summary(by = Status, 
+    select(Status, Year, TotalPop, PctMedicaid:PctEducLow, UrbanRuralFlag) %>% 
+     tbl_summary(by = Status, 
                 statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no") %>% 
   add_p()
+
+
+
+
+df.z.temp %>% 
+  #select(Zip, Year, DirectlyTreated, Att) %>% 
+  mutate(Status = ifelse(Att == 0, NA, 
+                         ifelse(Att > 0 & DirectlyTreated == 0, "IndirectlyTreated","DirectlyTreated"))) %>% 
+  inner_join(census, by = c("Zip" = "ZipCode", "Year" = "YEAR")) %>% 
+  filter(Year %in% c(2012, 2022)) %>% 
+  mutate(PctMedicaid = Medicaid / MCD.denom * 100, 
+         PctUninsured = Uninsured / Unins.denom * 100, 
+         PctPoverty = IncomeBelowPoverty / PovertyStatusDet * 100, 
+         PctUnemployed = Unemployed / Unemp_denom * 100, 
+         PctBlack = Black / TotalPop * 100, 
+         PctHispanic = Hispanic / TotalPop * 100, 
+         PctChildren = AgeUnder18 / TotalPop * 100, 
+         PctElderly = Age65andOver / TotalPop * 100, 
+         PctEducLow = EducLow / TotalPop * 100) %>% 
+    select(Zip, Status, Year, TotalPop, PctMedicaid:PctEducLow) %>% 
+   #group_by(Zip) %>% 
+  pivot_longer(cols = TotalPop:PctEducLow) %>% 
+  filter(!is.na(Status)) %>% 
+  unique() %>% 
+  pivot_wider(id_cols = c(Zip, name, Status), names_from = Year, values_from = value) %>% 
+  mutate(diff = `2022` - `2012`) %>% 
+  pivot_wider(id_cols = c(Zip, Status), names_from = name, values_from = diff) %>% 
+  select(Status:PctEducLow) %>% 
+       tbl_summary(by = Status, 
+                statistic = list(all_continuous() ~ "{mean} ({sd})"), missing = "no" ) %>% 
+  add_p()
+  
+  
   
 
 
@@ -2104,7 +2509,7 @@ p
 
 
 
-ggsave(filename = "Figure2.png", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Figures", plot = p, width = 11, height = 8)
+#ggsave(filename = "Figure2.png", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Figures", plot = p, width = 11, height = 8)
 
 summary(lm(log(Density.NewZip) ~ log(Density.Origin) * I(DistToClosestSite / 10), data = df.z.dist.plot))
 
@@ -2424,8 +2829,8 @@ did2s(
 
 # Save Datasets
 ```{r}
-#df.z.temp %>% write_csv("/Users/markow/Dropbox/Git/Competition/data_processed/final_manuscript_allocation.csv")
-#df.temptemp %>% write_csv("/Users/markow/Dropbox/Git/Competition/data_processed/final_manuscript_core.csv")
+# df.z.temp %>% write_csv("/Users/markow/Dropbox/Git/Competition/data_processed/finalfinal_manuscript_allocation.csv")
+# df.temptemp %>% write_csv("/Users/markow/Dropbox/Git/Competition/data_processed/finalfinal_manuscript_core.csv")
 ```
 
 

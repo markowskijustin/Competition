@@ -308,6 +308,7 @@ uds.sites %>%
   filter(Year %in% c(2021, 2022, 2023)) %>% 
   arrange(`Grant Number`, Year)
 
+
 ```
 
 
@@ -460,6 +461,9 @@ census %>%
   #unique() %>% 
   table() %>% 
   table()
+
+
+#write_csv(census, "/Users/jhm65/Dropbox/OtherData/Emergency/ACS - Tract/ACS_zips.csv")
 ```
 
 
@@ -682,6 +686,9 @@ uds.covariates %>%
 uds.covariates %>% 
   filter(Pct.Homeless > 99)
 
+
+
+
 ```
 
 
@@ -824,7 +831,7 @@ uds.quality.6b <- rbind(
 
 ## Removes FQHCs that were not open during those first 3 years of the study period
 uds.quality.6b <- uds.quality.6b %>% 
-  inner_join(uds.cw %>% mutate(STATE = toupper(STATE)) %>% unique() %>% mutate(STATE = ifelse(BHCMIS.ID == '010530', 'ME', 
+  left_join(uds.cw %>% mutate(STATE = toupper(STATE)) %>% unique() %>% mutate(STATE = ifelse(BHCMIS.ID == '010530', 'ME', 
                                                                                        ifelse(BHCMIS.ID == '090090', 'AZ', STATE))) %>% 
                select(BHCMIS.ID, STATE) %>% unique(), by = c("BHCMISID" = "BHCMIS.ID"))
 
@@ -955,7 +962,7 @@ uds.quality.7 <- rbind(
 
 ## Removes FQHCs that were not open during those first 3 years of the study period
 uds.quality.7 <- uds.quality.7 %>% 
-  inner_join(uds.cw %>% mutate(STATE = toupper(STATE)) %>% unique() %>% mutate(STATE = ifelse(BHCMIS.ID == '010530', 'ME', 
+  left_join(uds.cw %>% mutate(STATE = toupper(STATE)) %>% unique() %>% mutate(STATE = ifelse(BHCMIS.ID == '010530', 'ME', 
                                                                                        ifelse(BHCMIS.ID == '090090', 'AZ', STATE))) %>% 
                select(ModernGranteeID, STATE) %>% unique(), by = c("GrantNumber" = "ModernGranteeID")) %>% 
   mutate(Race = ifelse(Race == '-', NA, Race),
@@ -969,7 +976,7 @@ uds.quality.7[is.na(uds.quality.7$dm.rate),]$dm.rate <- 0
 
 
 uds.quality.7 <- uds.quality.7 %>% 
-   inner_join(uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID), by = c("GrantNumber" = "ModernGranteeID")) %>% 
+   left_join(uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID), by = c("GrantNumber" = "ModernGranteeID")) %>% 
   arrange(Year, BHCMIS.ID, GrantNumber) %>% 
   mutate(BHCMISID = ifelse(is.na(BHCMISID), BHCMIS.ID, BHCMISID))
 
@@ -1046,17 +1053,33 @@ ustaffing <- read.csv("/Users/markow/Dropbox/Git/Data/Updated_FQHC_Staffing.csv"
 uassliabs <- read.csv("/Users/markow/Dropbox/Git/Data/Updated_FQHC_Assets_and_Liabilities.csv")
 
 
-ufins <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID) %>% 
-  left_join(cw, by = c("ModernGranteeID" = "Grant Number")) %>% 
-  left_join(ufins.revenue.expenses, by = c("EIN" = "EIN")) %>% 
-  select(ModernGranteeID:EIN, form_year:fringe_rate) %>% 
-  left_join(ustaffing %>% select(EIN:Staff), by = c("EIN","form_year" = "Year")) %>% 
-  left_join(uassliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) 
+ufins2 <- read_excel("//Users/markow/Dropbox/Git/UDS/UDS-2022-Full-Dataset.xlsx", sheet = "HealthCenterInfo", skip = 0) %>% select( `GrantNumber`, `BHCMISID`) %>%
+  left_join(cw, by = c("GrantNumber" = "Grant Number")) %>%
+  left_join(ufins.revenue.expenses, by = c("EIN" = "EIN")) %>%
+  select(`GrantNumber`:EIN, form_year:fringe_rate) %>%
+  left_join(ustaffing %>% select(EIN:Staff), by = c("EIN","form_year" = "Year")) %>%
+  left_join(uassliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year")) %>%
+  rename(ModernGranteeID = `GrantNumber`,
+         BHCMIS.ID = `BHCMISID`)
+
+ufins <- uds.cw %>% filter(Year == 2011) %>% unique() %>% select(ModernGranteeID, BHCMIS.ID) %>%
+  left_join(cw, by = c("ModernGranteeID" = "Grant Number")) %>%
+  left_join(ufins.revenue.expenses, by = c("EIN" = "EIN")) %>%
+  select(ModernGranteeID:EIN, form_year:fringe_rate) %>%
+  left_join(ustaffing %>% select(EIN:Staff), by = c("EIN","form_year" = "Year")) %>%
+  left_join(uassliabs %>% select(EIN:Liabilities), by = c("EIN","form_year" = "Year"))
+
+length(unique(ufins.revenue.expenses$EIN))
 
 
 
 
-fins.revenue.expenses <- ufins
+fins.revenue.expenses <- ufins #rbind(ufins, ufins2) %>% unique()
+
+
+uds.sites %>% 
+  select(`BHCMIS ID`, `Grant Number`, `Health Center Name`)
+
 
 ```
 
@@ -1300,7 +1323,9 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
   mutate(year.rel = Year - Att.random)
 
 ######adjust Altman components for inf estimates
-  
+
+
+
 ```
 
 
@@ -1309,7 +1334,7 @@ dfc <- rbind(dfc %>% filter(Att > 0), dfc %>%
 ```{r}
 # write_csv(dfc, file = "/Users/markow/Dropbox/Git/Competition/data_processed/manuscript_analyticalfile.csv")
 # write.csv(uds.sites.full, file = "/Users/markow/Dropbox/Git/Competition/data_processed/manuscript_sites_geocoded.csv")
-
+#dfc %>% filter(Year == 2023) %>% write_csv("/Users/markow/Dropbox/Teaching/25 - Spring - MHA Quant Methods/Week 6/Week6LabData.csv")
 ```
 
 
