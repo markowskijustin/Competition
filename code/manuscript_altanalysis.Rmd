@@ -399,8 +399,9 @@ df.temptemp <- df.temptemp %>%
                     (STATE %in% c('MT','LA') & Year >= 2016) |
                     (STATE %in% c('VA','ME') & Year >= 2019) |
                     (STATE %in% c('ID','UT','NE') & Year >= 2020) |
-                    (STATE %in% c('OK','MO') & Year >= 2021) |
-                    (STATE %in% c('AZ','AR','CA','CO','CT','DE','DC','HI','IL','IA','KY','MD','MA','MN','NV','NJ','NM','NY','ND','OH','OR','PA','RI','VT','VA','WA') & Year >= 2014), 1, 0))
+                    (STATE %in% c('OK','MO','AR') & Year >= 2021) |
+                    (STATE %in% c('SD','NC') & Year >= 2023) | 
+                    (STATE %in% c('AZ','CA','CO','CT','DE','DC','HI','IL','IA','KY','MD','MA','MN','NV','NJ','NM','NY','ND','OH','OR','PA','RI','VT','VA','WA') & Year >= 2014), 1, 0))
 
 
 df.temptemp <- df.temptemp %>% 
@@ -840,7 +841,7 @@ p.desc <- annotate_figure(p.desc, top = text_grob("CHC Growth and Density by Zip
 p.desc
 
 
-
+#ggsave(filename = "Figure1.pdf", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Revision 1", plot = p.desc, width = 7, height = 10)
 ```
 
 
@@ -1000,7 +1001,7 @@ for (k in 1:23){
       data = df.temptemptemp, 
       yname = "Outcome", 
       treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless  | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
         second_stage = ~ i(Tx, ref = FALSE),
         cluster_var = "ID",
       verbose = TRUE
@@ -1153,6 +1154,7 @@ ess <- es.data[-1,] %>%
 ess + theme(legend.position="none")
 ess + theme(legend.position="bottom")
 
+ggsave(filename = "Figure2.pdf", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Revision 1", plot = ess + theme(legend.position="none"), width = 8, height = 10)
 
 ```
 
@@ -1258,7 +1260,7 @@ for (k in 1:23){
       data = df.temptemptemp,
       yname = "Outcome",
       treatment = "Tx",
-        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year ,
         second_stage =~ i(Tx*ifelse(value_min== 1, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min>=2, 1, 0), ref = FALSE),
         #second_stage =~ i(Tx, ref = FALSE) + I(as.numeric(Tx) * as.numeric(value_min)) ,
         cluster_var = "ID",
@@ -1333,7 +1335,7 @@ df.temptemp %>%
 
 
 
-## Stratified figure instead of table 
+## Stratified figure instead of table - optional
 ```{r}
 
 strat.temp <- coeffs.did.strat
@@ -1344,6 +1346,11 @@ strat.temp[18,] <- strat.temp[18,] / 100
 #strat.temp[12,] <- strat.temp[12,] / 5.5 * 100
 
 strat.temp <- coeffs.did.strat
+
+
+
+
+
 
 strat.temp <- (strat.temp/(df.temptemp %>% 
   mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
@@ -1379,6 +1386,61 @@ strat.temp <- (cbind(core.did.estimates.strat[,1], strat.temp[-1,c(1:2)]) %>%
 
 
 strat.temp$Outcome <- rep(c("Composite Quality of Care", "Total Patients Served","Financial resilience,\nAltman’s Z Score", "Patient-to-Staff Ratio","Average prevalence of\nselect chronic conditions","Intensity", "Medicaid","Uninsured","CostPerPat","Quick Ratio","Months of Cash Available", "Revenue-to-Expenses","Liabilities-to-Assets","Staff","Closure, Acquisition or\nloss of FQHC status"), 2)
+
+
+
+strat.temp <- strat.temp %>% 
+  select(Outcome) %>% 
+  cbind(data.frame(rbind(c(1.82, -0.4, 4.04),
+      c(-448, -2513, 1617), 
+      c(-0.08, -0.33, 0.16), 
+      c(6.30, 0.4, 12.2), 
+      c(-0.18, -0.71, 0.34), 
+      
+      c(NA, NA, NA), 
+      c(2.33, 0.03, 4.63), 
+      c(-2.92, -5.4, -0.44), 
+      c(NA, NA, NA), 
+      c(-0.25, -0.73, 0.23), 
+      
+      c(-0.31, -0.75, 0.14), 
+      c(-0.37, -2.42, 1.68), 
+      c(4.75, -0.64, 10.14), 
+      c(2.49, -18.84, 23.82), 
+      c(-1.22, -3.48, 1.03), 
+
+      c(-3.31, -5.65, -0.96), 
+      c(4701, 1533, 7869) , 
+      c(-0.37, -0.65, -0.09), 
+      c(4.43, -1.92, 10.78), 
+      c(-0.69, -1.08, -0.31), 
+      
+      c(NA, NA, NA), 
+      c(5.75, 3.46, 8.04), 
+      c(-3.17, -5.32, -1.01), 
+      c(NA, NA, NA), 
+      c(-0.99, -1.50, -0.48), 
+      
+      c(-0.67, -1.09, -0.24), 
+      c(-1.25, -2.87, 0.37), 
+      c(5.36, 1.62, 9.11), 
+      c(81.13, 46.12, 116.14), 
+      c(1.67, 0.62, 2.73)))  * 100 / as.numeric((df.temptemp %>% 
+  mutate(Post = ifelse(year.rel >= 0, 1, 0)) %>% 
+  filter(!is.na(value) & value_min > 1) %>% 
+  group_by(Post, Treat) %>% 
+  select(Qcomp, Total, Altman, logPatsPerStaff, Complexity, Intensity, Pct.MCD, Pct.None, CostPerPat, quick_ratio, months_of_cash, Profitability, LiabPctAssets, Staff) %>% 
+  summarise_all(mean.nas) %>% 
+  filter(Post == 0 & Treat == "Treated") %>% 
+  t() %>% 
+    rbind(100))[-c(1,2),])
+
+
+) %>% 
+  rename(Estimate = X1, 
+         LB = X2, UB = X3) %>% 
+  cbind(strat.temp %>% 
+  select(Class, Measure))
 
 
 p <- strat.temp  %>% 
@@ -1425,9 +1487,16 @@ colnames(df.temptemp)[17:39]
 
 
 
+ggsave(filename = "Figure3.pdf", path = "/Users/markow/Dropbox/Writing/CHC Competitive Shocks/Revision 1", plot = p + theme(panel.spacing = unit(1, "lines"),  strip.text = element_text(face = "bold", size = 12)), width = 8, height = 10)
+
+
 
 
 ```
+
+
+
+
 
 
 
@@ -1525,6 +1594,112 @@ cbind(core.did.estimates[,c(1,2,4)], core.did.estimates.pre2020[,c(2,4)], core.d
 ```
 
 
+
+
+
+```{r}
+
+
+
+
+
+coeffs.did.ACA <- rep(0, 8)
+
+for (k in 1:23){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) #%>% filter(Att %notin% c(2011))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  model <-  did2s(
+      data = df.temptemptemp %>% inner_join(df.temptemptemp %>% group_by(`BHCMIS ID`) %>% summarise(ACA = max(ACA)) %>% filter(ACA == 1), by = c("BHCMIS ID")) %>% filter(Year < 2024),  
+      #data = df.temptemptemp %>% filter(ACA == 0 & Year <= 2024), 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage =~ i(Tx*ifelse(value_min== 1, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min >= 2, 1, 0), ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs.did.ACA <- rbind(coeffs.did.ACA, c(model$coeftable[1,], model$coeftable[2,]))
+  
+
+}
+
+
+core.did.estimates.ACA <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.ACA[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  mutate(Estimate.1 = round(as.numeric(Estimate.1), 2), `95% CI.1` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(`Std..Error.1`), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(`Std..Error.1`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Pr...t.., Estimate.1, `95% CI.1`, `Pr...t...1`)
+
+core.did.estimates.ACA <- core.did.estimates.ACA
+#rownames(core.did.estimates) <- NULL
+
+
+
+
+
+coeffs.did.nonACA <- rep(0, 8)
+
+for (k in 1:23){
+
+  #df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Tx > 1, 1, 0)) %>% filter(!is.na(Tx)) #%>% group_by(ID) %>% mutate(EarlyHHI = first(ClinicHHI, na_rm = TRUE)) %>% filter(EarlyHHI < 9000)
+  df.temptemptemp <- df.temptemp %>% mutate(Tx = ifelse(Year >= Att & Att %notin% c(0, 2009, 2010), 1, 0)) %>% filter(!is.na(Tx)) #%>% filter(Att %notin% c(2011))
+  colnames(df.temptemptemp)[(16+k)] <- "Outcome"
+  # Winsorized
+  outlier.vals <- quantile(df.temptemptemp$Outcome, p = c(0.01, 0.99), na.rm = TRUE)
+  df.temptemptemp <- df.temptemptemp %>% 
+    mutate(Outcome = ifelse(Outcome <= outlier.vals[1], outlier.vals[1], 
+                            ifelse(Outcome >= outlier.vals[2], outlier.vals[2], Outcome)))
+  model <-  did2s(
+      data = df.temptemptemp %>% inner_join(df.temptemptemp %>% group_by(`BHCMIS ID`) %>% summarise(ACA = max(ACA)) %>% filter(ACA == 0), by = c("BHCMIS ID")) %>% filter(Year < 2024),  
+      #data = df.temptemptemp %>% filter(ACA == 0 & Year <= 2024), 
+      yname = "Outcome", 
+      treatment = "Tx",
+        first_stage = ~ Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.FarmWorker + Pct.Homeless + UrbanRuralFlag | ID + Year , #Pct.NHA + Pct.NHB + Pct.HL + Pct.LessThan100pctFPL + Pct.MCD + Pct.MCR + Pct.None | ID + Year , 
+        second_stage =~ i(Tx*ifelse(value_min== 1, 1, 0), ref = FALSE) + i(Tx*ifelse(value_min >= 2, 1, 0), ref = FALSE),
+        cluster_var = "ID",
+      verbose = TRUE
+    )
+
+
+  coeffs.did.nonACA <- rbind(coeffs.did.nonACA, c(model$coeftable[1,], model$coeftable[2,]))
+  
+
+}
+
+
+core.did.estimates.nonACA <- data.frame(cbind(colnames(df.temptemp)[17:39], (coeffs.did.nonACA[-1,]))) %>% 
+  #select(V1, Estimate, Pr...t.., Estimate.1, Pr...t...1) %>% 
+  mutate(Estimate = round(as.numeric(Estimate), 2), `95% CI` = paste(round(as.numeric(Estimate) - 1.96 * as.numeric(`Std..Error`), 2), ", ", round(as.numeric(Estimate) + 1.96 * as.numeric(`Std..Error`), 2), sep = "")) %>% 
+  mutate(Estimate.1 = round(as.numeric(Estimate.1), 2), `95% CI.1` = paste(round(as.numeric(Estimate.1) - 1.96 * as.numeric(`Std..Error.1`), 2), ", ", round(as.numeric(Estimate.1) + 1.96 * as.numeric(`Std..Error.1`), 2), sep = "")) %>% 
+  select(V1, Estimate, `95% CI`, Pr...t.., Estimate.1, `95% CI.1`, `Pr...t...1`)
+
+core.did.estimates.nonACA <- core.did.estimates.nonACA
+#rownames(core.did.estimates) <- NULL
+
+
+
+
+
+cbind(core.did.estimates.ACA, core.did.estimates.nonACA)
+
+
+df.temptemptemp %>% inner_join(df.temptemptemp %>% group_by(`BHCMIS ID`) %>% summarise(ACA = max(ACA)), by = c("BHCMIS ID")) %>% 
+  mutate(value = ifelse(value_min == 1, 0, 1)) %>% 
+  ungroup() %>% 
+  select(ACA.y, value) %>% 
+  group_by(ACA.y, value) %>% 
+  summarise(n())
+
+```
 
 
 
